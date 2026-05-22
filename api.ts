@@ -5,8 +5,8 @@
  * All component-level mock-data calls should be replaced with these functions.
  */
 
-// Empty string = same domain. Cloudflare Pages middleware will handle routing to Railway backend
-const BASE_URL = '';
+// Direct connection to Railway backend
+const BASE_URL = 'https://dumlis-final.railway.app';
 
 /** مسار الدرجات: لا يستخدم /grades لأن بعض الإضافات تحجب المسار فيظهر Failed to fetch */
 const GRADES_PREFIX = '/student-grades';
