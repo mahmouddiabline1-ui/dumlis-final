@@ -5,11 +5,8 @@
  * All component-level mock-data calls should be replaced with these functions.
  */
 
-const _env =
-  typeof import.meta !== 'undefined'
-    ? (import.meta as ImportMeta & { env?: Record<string, string> }).env
-    : undefined;
-const BASE_URL = (_env?.VITE_API_URL && String(_env.VITE_API_URL).replace(/\/$/, '')) || 'https://dumlis-final1.workers.dev';
+// Always use Cloudflare Worker for API to bypass CORS issues
+const BASE_URL = 'https://dumlis-final1.mahmouddiabline1.workers.dev';
 
 /** مسار الدرجات: لا يستخدم /grades لأن بعض الإضافات تحجب المسار فيظهر Failed to fetch */
 const GRADES_PREFIX = '/student-grades';
