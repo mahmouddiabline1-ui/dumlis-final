@@ -9,7 +9,7 @@ const _env =
   typeof import.meta !== 'undefined'
     ? (import.meta as ImportMeta & { env?: Record<string, string> }).env
     : undefined;
-const BASE_URL = (_env?.VITE_API_URL && String(_env.VITE_API_URL).replace(/\/$/, '')) || 'http://localhost:8000';
+const BASE_URL = (_env?.VITE_API_URL && String(_env.VITE_API_URL).replace(/\/$/, '')) || 'https://dumlis-final.railway.app';
 
 /** مسار الدرجات: لا يستخدم /grades لأن بعض الإضافات تحجب المسار فيظهر Failed to fetch */
 const GRADES_PREFIX = '/student-grades';
