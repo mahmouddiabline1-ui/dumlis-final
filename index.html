@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DUMLIS | نظام إدارة شؤون طلاب جامعة دمياط</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Tajawal', 'sans-serif'],
+            },
+            colors: {
+              primary: {
+                50: '#f0f7ff',
+                100: '#e0effe',
+                200: '#bae0fd',
+                300: '#7cc5f8',
+                400: '#36a6f1',
+                500: '#0c8de4',
+                600: '#0270c3',
+                700: '#06599e',
+                800: '#0a4b83',
+                900: '#2e4385',
+                950: '#1e2b58',
+              },
+              gold: {
+                50:  '#faf5d7',
+                100: '#f6e8ab',
+                200: '#f0d97a',
+                300: '#eac84b',
+                400: '#dcb32f',
+                500: '#c79a00',
+                600: '#a88200',
+                700: '#876800',
+                800: '#6a5200',
+                900: '#4d3b00',
+              }
+            }
+          },
+        },
+      }
+    </script>
+</head>
+  <body class="bg-gray-50 text-slate-800 font-sans antialiased">
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

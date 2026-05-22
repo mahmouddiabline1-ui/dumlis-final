@@ -1,0 +1,1543 @@
+-- ====================================================================
+-- PostgreSQL DDL Script for Educational System Schema
+-- Based on the entities and attributes defined in the Canvas document.
+-- ====================================================================
+
+-- 1. Create Staff table first, as Department needs Staff for Chairperson.
+-- The FK constraint for ChairpersonId must be added later.
+CREATE TABLE Staff (
+    StaffId         SERIAL PRIMARY KEY,
+    Name            VARCHAR(255) NOT NULL,
+    Gender          VARCHAR(10),
+    DOB             DATE,
+    PhoneNo         VARCHAR(20),
+    Email           VARCHAR(100) UNIQUE,
+    Address         VARCHAR(255),
+    DeptId          INT, -- FK to Department (Added later to avoid circular dependency)
+    Salary          NUMERIC(10, 2),
+    Position        VARCHAR(100),
+    Status          VARCHAR(50) -- e.g., 'Active', 'On Leave'
+);
+
+-- 2. Department table
+CREATE TABLE Department (
+    DeptId          SERIAL PRIMARY KEY,
+    Name            VARCHAR(100) NOT NULL UNIQUE,
+    Location        VARCHAR(100),
+    DateEstablished DATE,
+    ChairpersonId   INT UNIQUE, -- FK to Staff
+    CONSTRAINT fk_department_chairperson
+        FOREIGN KEY (ChairpersonId)
+        REFERENCES Staff(StaffId)
+        ON DELETE SET NULL -- If a Staff member leaves, the Chairperson spot is vacated
+);
+
+-- Now add the FK to Staff table, linking Staff to Department
+ALTER TABLE Staff
+ADD CONSTRAINT fk_staff_department
+    FOREIGN KEY (DeptId)
+    REFERENCES Department(DeptId)
+    ON DELETE SET NULL;
+
+
+-- 3. Student table
+CREATE TABLE Student (
+    StudentId       SERIAL PRIMARY KEY,
+    Name            VARCHAR(255) NOT NULL,
+    Gender          VARCHAR(10),
+    DOB             DATE,
+    PhoneNo         VARCHAR(20),
+    Email           VARCHAR(100) UNIQUE,
+    Address         VARCHAR(255),
+    DeptId          INT NOT NULL, -- FK to Department
+    EnrollmentDate  DATE NOT NULL DEFAULT CURRENT_DATE,
+    Status          VARCHAR(50), -- e.g., 'Active', 'Graduated'
+    CONSTRAINT fk_student_department
+        FOREIGN KEY (DeptId)
+        REFERENCES Department(DeptId)
+        ON DELETE RESTRICT -- Cannot delete department if students exist
+);
+
+
+-- 4. Course table (A major of study, e.g., 'BSc Computer Science')
+CREATE TABLE Course (
+    CourseId        SERIAL PRIMARY KEY,
+    CourseName      VARCHAR(150) NOT NULL UNIQUE,
+    CourseType      VARCHAR(50), -- e.g., 'Undergraduate', 'Graduate'
+    Duration        INT, -- Duration in years
+    DeptId          INT NOT NULL, -- FK to Department
+    StaffId         INT, -- FK to Staff (Coordinator)
+    CONSTRAINT fk_course_department
+        FOREIGN KEY (DeptId)
+        REFERENCES Department(DeptId)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_course_coordinator
+        FOREIGN KEY (StaffId)
+        REFERENCES Staff(StaffId)
+        ON DELETE SET NULL
+);
+
+-- 5. Subject table (Individual classes, e.g., 'Database Management')
+CREATE TABLE Subject (
+    SubjectId       SERIAL PRIMARY KEY,
+    SubjectName     VARCHAR(150) NOT NULL UNIQUE,
+    CreditHours     NUMERIC(3, 1) NOT NULL,
+    Prerequisites   VARCHAR(255), -- Could be a SubjectId or list of IDs
+    CourseId        INT NOT NULL, -- FK to Course
+    CONSTRAINT fk_subject_course
+        FOREIGN KEY (CourseId)
+        REFERENCES Course(CourseId)
+        ON DELETE CASCADE
+);
+
+-- 6. Exam table
+CREATE TABLE Exam (
+    ExamId          SERIAL PRIMARY KEY,
+    SubjectId       INT NOT NULL, -- FK to Subject
+    Date            DATE NOT NULL,
+    Type            VARCHAR(50) NOT NULL, -- e.g., 'Midterm', 'Final', 'Quiz'
+    Weightage       NUMERIC(5, 2), -- Percentage weight of this exam
+    CONSTRAINT uk_exam_subject_type
+        UNIQUE (SubjectId, Type), -- Assume only one type of exam per subject
+    CONSTRAINT fk_exam_subject
+        FOREIGN KEY (SubjectId)
+        REFERENCES Subject(SubjectId)
+        ON DELETE CASCADE
+);
+
+-- 7. Project table (e.g., Graduation Project)
+CREATE TABLE Project (
+    ProjectId       SERIAL PRIMARY KEY,
+    ProjectName     VARCHAR(255) NOT NULL,
+    StartDate       DATE,
+    EndDate         DATE,
+    AdvisorId       INT NOT NULL, -- FK to Staff
+    StudentId       INT NOT NULL UNIQUE, -- FK to Student (One student per project)
+    DeptId          INT NOT NULL, -- FK to Department
+    Grade           VARCHAR(5), -- e.g., 'A', 'B+', 'P'
+    CONSTRAINT fk_project_advisor
+        FOREIGN KEY (AdvisorId)
+        REFERENCES Staff(StaffId)
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_project_student
+        FOREIGN KEY (StudentId)
+        REFERENCES Student(StudentId)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_project_department
+        FOREIGN KEY (DeptId)
+        REFERENCES Department(DeptId)
+        ON DELETE RESTRICT
+);
+
+-- 8. FeeType table
+CREATE TABLE FeeType (
+    FeeTypeId       SERIAL PRIMARY KEY,
+    Name            VARCHAR(100) NOT NULL UNIQUE, -- e.g., 'Tuition', 'Lab Fee', 'Dorm Fee'
+    Amount          NUMERIC(10, 2) NOT NULL,
+    DepartmentId    INT, -- FK to Department (if fee is department specific)
+    CONSTRAINT fk_feetype_department
+        FOREIGN KEY (DepartmentId)
+        REFERENCES Department(DeptId)
+        ON DELETE SET NULL
+);
+
+-- 9. Payment table
+CREATE TABLE Payment (
+    PaymentId       SERIAL PRIMARY KEY,
+    StudentId       INT NOT NULL, -- FK to Student
+    Amount          NUMERIC(10, 2) NOT NULL,
+    PaymentDate     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PaymentMethod   VARCHAR(50), -- e.g., 'Credit Card', 'Cash', 'Bank Transfer'
+    CONSTRAINT fk_payment_student
+        FOREIGN KEY (StudentId)
+        REFERENCES Student(StudentId)
+        ON DELETE RESTRICT
+);
+
+-- 10. StudentFee table (Linking Student to the fees they owe/paid)
+CREATE TABLE StudentFee (
+    StudentId       INT NOT NULL, -- FK to Student
+    FeeTypeId       INT NOT NULL, -- FK to FeeType
+    DueDate         DATE,
+    Status          VARCHAR(20) NOT NULL, -- 'Paid', 'Pending', 'Overdue'
+    PRIMARY KEY (StudentId, FeeTypeId),
+    CONSTRAINT fk_studentfee_student
+        FOREIGN KEY (StudentId)
+        REFERENCES Student(StudentId)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_studentfee_feetype
+        FOREIGN KEY (FeeTypeId)
+        REFERENCES FeeType(FeeTypeId)
+        ON DELETE RESTRICT
+);
+
+-- 11. StudentSubject table (Many-to-Many: Student enrolls in Subject)
+CREATE TABLE StudentSubject (
+    StudentId       INT NOT NULL,
+    SubjectId       INT NOT NULL,
+    Year            INT NOT NULL,
+    Semester        VARCHAR(20) NOT NULL, -- e.g., 'Fall', 'Spring'
+    Grade           VARCHAR(5), -- Final grade for the subject
+    PRIMARY KEY (StudentId, SubjectId, Year, Semester),
+    CONSTRAINT fk_studentsubject_student
+        FOREIGN KEY (StudentId)
+        REFERENCES Student(StudentId)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_studentsubject_subject
+        FOREIGN KEY (SubjectId)
+        REFERENCES Subject(SubjectId)
+        ON DELETE RESTRICT
+);
+
+-- 12. StaffSubject table (Many-to-Many: Staff teaches Subject)
+CREATE TABLE StaffSubject (
+    StaffId         INT NOT NULL,
+    SubjectId       INT NOT NULL,
+    Year            INT NOT NULL,
+    Semester        VARCHAR(20) NOT NULL,
+    PRIMARY KEY (StaffId, SubjectId, Year, Semester),
+    CONSTRAINT fk_staffsubject_staff
+        FOREIGN KEY (StaffId)
+        REFERENCES Staff(StaffId)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_staffsubject_subject
+        FOREIGN KEY (SubjectId)
+        REFERENCES Subject(SubjectId)
+        ON DELETE RESTRICT
+);
+
+-- 13. Result table (Links Student performance to a specific Exam)
+CREATE TABLE Result (
+    ResultId        SERIAL PRIMARY KEY,
+    StudentId       INT NOT NULL, -- FK to Student
+    ExamId          INT NOT NULL, -- FK to Exam
+    MarksObtained   NUMERIC(5, 2),
+    Status          VARCHAR(20), -- 'Pass', 'Fail'
+    CONSTRAINT uk_result_student_exam
+        UNIQUE (StudentId, ExamId), -- A student only takes an exam once
+    CONSTRAINT fk_result_student
+        FOREIGN KEY (StudentId)
+        REFERENCES Student(StudentId)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_result_exam
+        FOREIGN KEY (ExamId)
+        REFERENCES Exam(ExamId)
+        ON DELETE CASCADE
+);  -- Enable necessary extension for generating unique IDs if needed, although SERIAL is preferred for PKs.
+-- CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- -----------------------------------------------------------------------------
+-- Core Reference Tables
+-- -----------------------------------------------------------------------------
+
+-- GRADES Table: Defines the grading scale and point system.
+CREATE TABLE GRADES (
+    GradeID SERIAL PRIMARY KEY,
+    GradeName VARCHAR(50) UNIQUE NOT NULL, -- e.g., 'A+', 'B', 'Fail'
+    MinScore NUMERIC(5, 2), -- Minimum raw score percentage/value for this grade
+    MaxScore NUMERIC(5, 2), -- Maximum raw score percentage/value for this grade
+    GradePoints NUMERIC(3, 2) NOT NULL, -- GPA points equivalent
+    IsActive BOOLEAN DEFAULT TRUE,
+    CreatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UpdatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- PROGRAMMES Table: Defines academic programs/majors (e.g., BSc Computer Science).
+CREATE TABLE PROGRAMMES (
+    ProgrammeID SERIAL PRIMARY KEY,
+    ProgrammeName VARCHAR(255) NOT NULL,
+    ProgrammeShortName VARCHAR(50),
+    ProgrammeCode VARCHAR(20) UNIQUE NOT NULL,
+    TotalCredit NUMERIC(5, 2),
+    TotalWorkLoad INT,
+    DefaultCourseFormat VARCHAR(50),
+    MinGPA NUMERIC(3, 2),
+    MaxDuration INT, -- Max duration in semesters/years
+    IsActive BOOLEAN DEFAULT TRUE,
+    CreatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UpdatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Self-referencing FK for Predecessor Programme (e.g., prerequisite major)
+    PredecessorProgrammeID INT REFERENCES PROGRAMMES(ProgrammeID) 
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- COURSES Table: Defines distinct academic subjects (e.g., Database Systems).
+CREATE TABLE COURSES (
+    CourseID SERIAL PRIMARY KEY,
+    CourseCode VARCHAR(20) UNIQUE NOT NULL,
+    CourseName VARCHAR(255) NOT NULL,
+    Credit NUMERIC(4, 2) NOT NULL, -- Course credit value
+    WorkLoad INT, -- Estimated student workload hours
+    CourseLevel VARCHAR(50),
+    DefaultCourseFormat VARCHAR(50),
+    IsActive BOOLEAN DEFAULT TRUE,
+    CreatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UpdatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    -- FK for default grade if applicable
+    DefaultGradeID INT REFERENCES GRADES(GradeID) 
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    -- Self-referencing FK for simple predecessor course
+    PredecessorCourseID INT REFERENCES COURSES(CourseID) 
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- LECTURERS Table: Stores information about teaching staff.
+CREATE TABLE LECTURERS (
+    LecturerID SERIAL PRIMARY KEY,
+    FirstName VARCHAR(100) NOT NULL,
+    LastName VARCHAR(100) NOT NULL,
+    Title VARCHAR(50),
+    Email VARCHAR(255) UNIQUE NOT NULL,
+    Phone VARCHAR(50),
+    Office VARCHAR(50),
+    IsActive BOOLEAN DEFAULT TRUE,
+    CreatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UpdatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- STUDENTS Table: Stores information about enrolled students.
+CREATE TABLE STUDENTS (
+    StudentID SERIAL PRIMARY KEY,
+    FirstName VARCHAR(100) NOT NULL,
+    LastName VARCHAR(100) NOT NULL,
+    StudentNumber VARCHAR(50) UNIQUE NOT NULL,
+    Email VARCHAR(255) UNIQUE,
+    EnrollmentDate DATE NOT NULL,
+    IsActive BOOLEAN DEFAULT TRUE,
+    CreatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UpdatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    -- FK to the student's primary Programme
+    ProgrammeID INT REFERENCES PROGRAMMES(ProgrammeID) 
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+
+-- -----------------------------------------------------------------------------
+-- Linking Tables (Many-to-Many & Dependencies)
+-- -----------------------------------------------------------------------------
+
+-- PROGRAMME_COURSE_LINK: Links which courses belong to which programmes.
+CREATE TABLE PROGRAMME_COURSE_LINK (
+    CourseID INT NOT NULL REFERENCES COURSES(CourseID) 
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    ProgrammeID INT NOT NULL REFERENCES PROGRAMMES(ProgrammeID) 
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    IsMandatory BOOLEAN DEFAULT TRUE,
+    SpecificCredit NUMERIC(4, 2), -- Credit specific to this programme
+    PRIMARY KEY (CourseID, ProgrammeID)
+);
+
+-- COURSE_PREREQUISITES: Defines specific prerequisite requirements (which grade is needed).
+CREATE TABLE COURSE_PREREQUISITES (
+    CourseID INT NOT NULL REFERENCES COURSES(CourseID) 
+        ON UPDATE CASCADE ON DELETE CASCADE, -- The course that requires a prerequisite
+    PrerequisiteCourseID INT NOT NULL REFERENCES COURSES(CourseID) 
+        ON UPDATE CASCADE ON DELETE CASCADE, -- The prerequisite course
+    MinGradeID INT REFERENCES GRADES(GradeID) 
+        ON UPDATE CASCADE ON DELETE RESTRICT, -- Minimum grade required in the prerequisite
+    PRIMARY KEY (CourseID, PrerequisiteCourseID),
+    CHECK (CourseID <> PrerequisiteCourseID) -- A course cannot be its own prerequisite
+);
+
+-- -----------------------------------------------------------------------------
+-- Transactional Tables
+-- -----------------------------------------------------------------------------
+
+-- COURSE_RUNNINGS: Represents a specific offering of a course in a given term.
+CREATE TABLE COURSE_RUNNINGS (
+    RunningID SERIAL PRIMARY KEY,
+    AcademicYear INT NOT NULL,
+    Semester VARCHAR(20) NOT NULL, -- e.g., 'Fall', 'Spring'
+    StartDate DATE,
+    EndDate DATE,
+    MaxEnrollment INT,
+    IsActive BOOLEAN DEFAULT TRUE,
+    CreatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UpdatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CourseID INT NOT NULL REFERENCES COURSES(CourseID) 
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    LecturerID INT REFERENCES LECTURERS(LecturerID) 
+        ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+-- STUDENT_ENROLLMENTS: Tracks student registration in a specific course running.
+CREATE TABLE STUDENT_ENROLLMENTS (
+    EnrollmentID SERIAL PRIMARY KEY,
+    EnrollmentDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    IsCompleted BOOLEAN DEFAULT FALSE,
+    IsActive BOOLEAN DEFAULT TRUE,
+
+    RunningID INT NOT NULL REFERENCES COURSE_RUNNINGS(RunningID) 
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    StudentID INT NOT NULL REFERENCES STUDENTS(StudentID) 
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    
+    -- Final Grade assigned for the course
+    FinalGradeID INT REFERENCES GRADES(GradeID) 
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+
+    -- Constraint to ensure a student enrolls only once per course running
+    UNIQUE (RunningID, StudentID) 
+);
+
+-- ASSESSMENT: Defines specific evaluation components for a course running (e.g., 'Midterm Exam', 'Final Project').
+CREATE TABLE ASSESSMENT (
+    AssessmentID SERIAL PRIMARY KEY,
+    AssessmentName VARCHAR(255) NOT NULL,
+    AssessmentType VARCHAR(50),
+    Weight NUMERIC(5, 2) NOT NULL, -- Percentage weight of this assessment
+    MaxScore NUMERIC(5, 2),
+    DueDate DATE,
+    IsActive BOOLEAN DEFAULT TRUE,
+    CreatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UpdatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    RunningID INT NOT NULL REFERENCES COURSE_RUNNINGS(RunningID) 
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- ASSESSMENT_RESULTS: Stores the score a student received on a specific assessment.
+CREATE TABLE ASSESSMENT_RESULTS (
+    ResultID SERIAL PRIMARY KEY,
+    Score NUMERIC(5, 2),
+    SubmissionDate TIMESTAMP WITHOUT TIME ZONE,
+    CreatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UpdatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    AssessmentID INT NOT NULL REFERENCES ASSESSMENT(AssessmentID) 
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    StudentID INT NOT NULL REFERENCES STUDENTS(StudentID) 
+        ON UPDATE CASCADE ON DELETE CASCADE,
+
+    -- Constraint to ensure a student has only one result per assessment
+    UNIQUE (AssessmentID, StudentID)
+);  -- -----------------------------------------------------------------------------
+-- Internal Mail System Database Schema
+-- Based on the "البريد الداخلي للنظام" ERD
+-- -----------------------------------------------------------------------------
+
+-- 1. Departments Table
+CREATE TABLE Departments (
+    DepartmentID SERIAL PRIMARY KEY,
+    DepartmentName VARCHAR(255) UNIQUE NOT NULL,
+    DepartmentType VARCHAR(100), -- e.g., 'Academic', 'Administrative', 'IT'
+    CreatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Users Table
+CREATE TABLE Users (
+    UserID SERIAL PRIMARY KEY,
+    DepartmentID INT NOT NULL,
+    FullName VARCHAR(255) NOT NULL,
+    Role VARCHAR(100), -- e.g., 'Lecturer', 'Student', 'Admin'
+    Email VARCHAR(255) UNIQUE NOT NULL,
+    Status VARCHAR(50) DEFAULT 'Active', -- e.g., 'Active', 'Suspended', 'Inactive'
+    CreatedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_user_department
+        FOREIGN KEY (DepartmentID)
+        REFERENCES Departments(DepartmentID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- 3. Messages Table
+CREATE TABLE Messages (
+    MessageID SERIAL PRIMARY KEY,
+    SenderID INT NOT NULL,
+    ReceiverID INT, -- Note: Can be NULL if the system supports multi-recipient or broadcast messages.
+    Subject VARCHAR(512),
+    Content TEXT,
+    SentDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    Status VARCHAR(50) DEFAULT 'Sent', -- e.g., 'Sent', 'Draft'
+
+    CONSTRAINT fk_message_sender
+        FOREIGN KEY (SenderID)
+        REFERENCES Users(UserID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    CONSTRAINT fk_message_receiver
+        FOREIGN KEY (ReceiverID)
+        REFERENCES Users(UserID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- 4. Attachments Table
+CREATE TABLE Attachments (
+    AttachmentID SERIAL PRIMARY KEY,
+    MessageID INT NOT NULL,
+    FileName VARCHAR(255) NOT NULL,
+    FileType VARCHAR(50),
+    FileSize INT, -- Size in bytes
+    UploadDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_attachment_message
+        FOREIGN KEY (MessageID)
+        REFERENCES Messages(MessageID)
+        ON UPDATE CASCADE ON DELETE CASCADE -- If a message is deleted, its attachments are deleted
+);
+
+-- 5. SentMessages Table (Tracks messages in the sender's sent folder)
+CREATE TABLE SentMessages (
+    MessageID INT NOT NULL,
+    UserID INT NOT NULL,
+    SentDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP, -- Redundant but kept for schema fidelity
+    
+    PRIMARY KEY (MessageID, UserID),
+
+    CONSTRAINT fk_sent_message
+        FOREIGN KEY (MessageID)
+        REFERENCES Messages(MessageID)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+
+    CONSTRAINT fk_sent_user
+        FOREIGN KEY (UserID)
+        REFERENCES Users(UserID)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- 6. Inbox Table (Tracks messages in the recipient's inbox)
+CREATE TABLE Inbox (
+    InboxID SERIAL PRIMARY KEY,
+    MessageID INT NOT NULL,
+    UserID INT NOT NULL,
+    ReceivedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    IsRead BOOLEAN DEFAULT FALSE,
+
+    CONSTRAINT fk_inbox_message
+        FOREIGN KEY (MessageID)
+        REFERENCES Messages(MessageID)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+
+    CONSTRAINT fk_inbox_user
+        FOREIGN KEY (UserID)
+        REFERENCES Users(UserID)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+
+    -- Constraint to ensure a message is only in a user's inbox once
+    UNIQUE (MessageID, UserID)
+);
+
+-- 7. DeletedMessages Table (Tracks messages moved to the trash/deleted folder)
+CREATE TABLE DeletedMessages (
+    DeletedMessageID SERIAL PRIMARY KEY,
+    MessageID INT NOT NULL,
+    UserID INT NOT NULL,
+    DeleteDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_deleted_message
+        FOREIGN KEY (MessageID)
+        REFERENCES Messages(MessageID)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+
+    CONSTRAINT fk_deleted_user
+        FOREIGN KEY (UserID)
+        REFERENCES Users(UserID)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+
+    -- Constraint to ensure a message is only deleted once by a specific user
+    UNIQUE (MessageID, UserID)
+);  -- -----------------------------------------------------------------------------
+-- Academic Scheduling and Timetabling System Schema
+-- Based on the "الجدول الدراسية" ERD
+-- -----------------------------------------------------------------------------
+
+-- Core Entity Tables
+
+-- 1. Programmes Table (Academic Programs/Majors)
+CREATE TABLE Programmes (
+    ProgrammeID SERIAL PRIMARY KEY,
+    ProgrammeName VARCHAR(255) UNIQUE NOT NULL,
+    AcademicTerm VARCHAR(50),
+    BuildingType VARCHAR(50)
+    -- Other Programme attributes...
+);
+
+-- 2. Courses Table (Specific course details for scheduling)
+CREATE TABLE Courses (
+    CourseID SERIAL PRIMARY KEY,
+    CourseCode VARCHAR(20) UNIQUE NOT NULL,
+    CourseName VARCHAR(255) NOT NULL,
+    LectureHours INT,
+    LabHours INT,
+    Credit INT,
+    CourseType VARCHAR(50) -- e.g., 'Theory', 'Practical'
+    -- Other Course attributes...
+);
+
+-- 3. Instructors Table (Staff teaching the courses)
+CREATE TABLE Instructors (
+    InstructorID SERIAL PRIMARY KEY,
+    Name VARCHAR(255) NOT NULL,
+    Code VARCHAR(20) UNIQUE,
+    Status VARCHAR(50)
+    -- Other Instructor attributes...
+);
+
+-- 4. Rooms Table (Physical locations for classes)
+CREATE TABLE Rooms (
+    RoomID SERIAL PRIMARY KEY,
+    RoomName VARCHAR(100) UNIQUE NOT NULL,
+    RoomType VARCHAR(50), -- e.g., 'Lecture Hall', 'Lab'
+    Capacity INT
+    -- Other Room attributes...
+);
+
+-- 5. Location Table (Higher level location grouping)
+CREATE TABLE Location (
+    LocationID SERIAL PRIMARY KEY,
+    BuildingName VARCHAR(100) UNIQUE NOT NULL,
+    Floor VARCHAR(50)
+    -- Other Location attributes...
+);
+
+-- 6. Days Table (Days of the week for scheduling)
+CREATE TABLE Days (
+    DayID SERIAL PRIMARY KEY,
+    DayName VARCHAR(20) UNIQUE NOT NULL -- e.g., 'Monday', 'Tuesday'
+);
+
+-- 7. Periods Table (Time slots for scheduling)
+CREATE TABLE Periods (
+    PeriodID SERIAL PRIMARY KEY,
+    StartTime TIME NOT NULL,
+    EndTime TIME NOT NULL,
+    PeriodCount INT,
+    LabelCount INT
+    -- Other Period attributes...
+);
+
+-- 8. Groups Table (Student grouping/sections)
+CREATE TABLE Groups (
+    GroupID SERIAL PRIMARY KEY,
+    GroupName VARCHAR(100) UNIQUE NOT NULL,
+    GroupCode VARCHAR(50),
+    Semester INT,
+    Capacity INT,
+    AcademicYear INT
+    -- Other Group attributes...
+);
+
+-- -----------------------------------------------------------------------------
+-- Central Scheduling Table
+-- -----------------------------------------------------------------------------
+
+-- 9. CourseSchedule Table (The main linking table that forms the schedule)
+CREATE TABLE CourseSchedule (
+    ScheduleID SERIAL PRIMARY KEY,
+    CourseID INT NOT NULL,
+    InstructorID INT,
+    RoomID INT,
+    DayID INT NOT NULL,
+    PeriodID INT NOT NULL,
+    GroupID INT NOT NULL,
+    CourseType VARCHAR(50), -- Lecture or Lab for this specific schedule entry
+    Semester INT,
+    
+    CONSTRAINT fk_cs_course FOREIGN KEY (CourseID) REFERENCES Courses(CourseID) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_cs_instructor FOREIGN KEY (InstructorID) REFERENCES Instructors(InstructorID) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_cs_room FOREIGN KEY (RoomID) REFERENCES Rooms(RoomID) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_cs_day FOREIGN KEY (DayID) REFERENCES Days(DayID) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_cs_period FOREIGN KEY (PeriodID) REFERENCES Periods(PeriodID) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_cs_group FOREIGN KEY (GroupID) REFERENCES Groups(GroupID) ON UPDATE CASCADE ON DELETE RESTRICT,
+    
+    -- Constraint to prevent scheduling two events in the same room at the same time
+    UNIQUE (RoomID, DayID, PeriodID)
+);
+
+-- -----------------------------------------------------------------------------
+-- Linking and Report Tables (Partial Implementation)
+-- -----------------------------------------------------------------------------
+
+-- 10. StudentEnrollments (Links Students to the Courses they take)
+-- Assuming a Students table exists, we link to it here.
+CREATE TABLE StudentEnrollments (
+    EnrollmentID SERIAL PRIMARY KEY,
+    StudentID INT NOT NULL, -- Assuming Students(StudentID) exists elsewhere
+    CourseID INT NOT NULL REFERENCES Courses(CourseID) ON UPDATE CASCADE ON DELETE CASCADE,
+    EnrollmentStatus VARCHAR(50),
+    ReportError TEXT,
+    
+    UNIQUE (StudentID, CourseID)
+);
+
+-- 11. ProgramCourseReports (Links Courses to Programmes)
+CREATE TABLE ProgramCourseReports (
+    ProgrammeID INT NOT NULL REFERENCES Programmes(ProgrammeID) ON UPDATE CASCADE ON DELETE CASCADE,
+    CourseID INT NOT NULL REFERENCES Courses(CourseID) ON UPDATE CASCADE ON DELETE CASCADE,
+    AcademicTerm VARCHAR(50),
+    Semester INT,
+    
+    PRIMARY KEY (ProgrammeID, CourseID)
+);
+
+-- 12. LocationRoomReports (Links Rooms to Locations)
+CREATE TABLE LocationRoomReports (
+    LocationID INT NOT NULL REFERENCES Location(LocationID) ON UPDATE CASCADE ON DELETE CASCADE,
+    RoomID INT NOT NULL REFERENCES Rooms(RoomID) ON UPDATE CASCADE ON DELETE CASCADE,
+    RoomType VARCHAR(50),
+    
+    PRIMARY KEY (LocationID, RoomID)
+);
+
+-- 13. GeneralLectureSchedule (Links CourseSchedule entries to Location/Rooms/Instructors for general views)
+CREATE TABLE GeneralLectureSchedule (
+    ScheduleID INT NOT NULL REFERENCES CourseSchedule(ScheduleID) ON UPDATE CASCADE ON DELETE CASCADE,
+    LocationID INT NOT NULL REFERENCES Location(LocationID) ON UPDATE CASCADE ON DELETE RESTRICT,
+    InstructorID INT REFERENCES Instructors(InstructorID) ON UPDATE CASCADE ON DELETE SET NULL,
+    DayID INT NOT NULL REFERENCES Days(DayID) ON UPDATE CASCADE ON DELETE RESTRICT,
+    
+    PRIMARY KEY (ScheduleID, LocationID)
+); -- -----------------------------------------------------------------------------
+-- Student Preferences and Coordination System Schema
+-- Based on the "الرغبات و التنسيق" ERD
+-- -----------------------------------------------------------------------------
+
+-- Core Entity Tables
+
+-- 1. Department Table (Academic/Administrative Units)
+CREATE TABLE Department (
+    DepartmentID SERIAL PRIMARY KEY,
+    DepartmentName VARCHAR(255) UNIQUE NOT NULL,
+    Capacity INT -- Maximum number of students the department can accept
+);
+
+-- 2. Staff Table (Personnel related to coordination/reporting)
+CREATE TABLE Staff (
+    StaffID SERIAL PRIMARY KEY,
+    Name VARCHAR(255) NOT NULL,
+    StaffCode VARCHAR(50) UNIQUE NOT NULL,
+    Role VARCHAR(100), -- e.g., 'Coordinator', 'Secretary'
+    Phone VARCHAR(50),
+    Email VARCHAR(255)
+);
+
+-- 3. Courses Table (Courses offered by departments)
+CREATE TABLE Courses (
+    CourseID SERIAL PRIMARY KEY,
+    DepartmentID INT NOT NULL,
+    CourseName VARCHAR(255) NOT NULL,
+    CourseCode VARCHAR(20) UNIQUE NOT NULL,
+    CreditHours INT,
+
+    CONSTRAINT fk_course_department
+        FOREIGN KEY (DepartmentID)
+        REFERENCES Department(DepartmentID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- 4. Program Table (Academic Programs/Majors)
+CREATE TABLE Program (
+    ProgramID SERIAL PRIMARY KEY,
+    DepartmentID INT NOT NULL,
+    ProgramName VARCHAR(255) NOT NULL,
+    ProgramCapacity INT,
+    YearOffered INT,
+
+    CONSTRAINT fk_program_department
+        FOREIGN KEY (DepartmentID)
+        REFERENCES Department(DepartmentID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- 5. Students Table (General student information)
+CREATE TABLE Students (
+    StudentID SERIAL PRIMARY KEY,
+    ProgramID INT, -- The program the student is eventually accepted into
+    DepartmentID INT, -- The department the student is eventually accepted into
+    FullName VARCHAR(255) NOT NULL,
+    AdmissionYear INT NOT NULL,
+    SecondaryScore NUMERIC(5, 2), -- Score from secondary education
+    CumulativeGPA NUMERIC(3, 2),
+    Phone VARCHAR(50),
+
+    CONSTRAINT fk_student_program
+        FOREIGN KEY (ProgramID)
+        REFERENCES Program(ProgramID)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    CONSTRAINT fk_student_department
+        FOREIGN KEY (DepartmentID)
+        REFERENCES Department(DepartmentID)
+        ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+
+-- Coordination and Preference Tables
+
+-- 6. CoordinationRules Table (Rules for admission and acceptance)
+CREATE TABLE CoordinationRules (
+    RuleID SERIAL PRIMARY KEY,
+    ProgramID INT NOT NULL,
+    RuleName VARCHAR(255),
+    WeightingMethod VARCHAR(50), -- e.g., 'Weighted Avg', 'Raw Score'
+    MinSecondaryScore NUMERIC(5, 2),
+    MinCumulativeGPA NUMERIC(3, 2),
+    AdditionalConditions TEXT,
+    
+    CONSTRAINT fk_rules_program
+        FOREIGN KEY (ProgramID)
+        REFERENCES Program(ProgramID)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- 7. Preferences Table (Student choices for programs/departments)
+CREATE TABLE Preferences (
+    PreferenceID SERIAL PRIMARY KEY,
+    StudentID INT NOT NULL,
+    ProgramID INT NOT NULL,
+    PreferenceRank INT NOT NULL, -- 1st choice, 2nd choice, etc.
+    DateRecorded DATE,
+    IsFinalized BOOLEAN DEFAULT FALSE,
+    Signature TEXT, -- Could store a digital signature or hash
+
+    CONSTRAINT fk_pref_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Students(StudentID)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+
+    CONSTRAINT fk_pref_program
+        FOREIGN KEY (ProgramID)
+        REFERENCES Program(ProgramID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    -- Ensures a student can only rank a program once
+    UNIQUE (StudentID, ProgramID),
+    
+    -- Ensures a student can only have one ranking (1, 2, 3...) per preference list
+    UNIQUE (StudentID, PreferenceRank)
+);
+
+-- Report and Status Tables
+
+-- 8. AcceptedStudents Table (Students who have been officially accepted)
+CREATE TABLE AcceptedStudents (
+    AcceptedID SERIAL PRIMARY KEY,
+    ProgramID INT NOT NULL,
+    StudentID INT NOT NULL UNIQUE, -- Ensures a student is accepted into only one program
+    AcceptanceDate DATE,
+    AcceptanceRank INT, -- The rank of the preference that resulted in acceptance
+    AcceptanceMethod VARCHAR(50),
+    
+    CONSTRAINT fk_accepted_program
+        FOREIGN KEY (ProgramID)
+        REFERENCES Program(ProgramID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+
+    CONSTRAINT fk_accepted_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Students(StudentID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- 9. EligibleCourses Table (Courses a student is eligible to take, based on program/rules)
+CREATE TABLE EligibleCourses (
+    EligibleID SERIAL PRIMARY KEY,
+    ProgramID INT NOT NULL,
+    CourseID INT NOT NULL,
+    CourseWeight NUMERIC(4, 2), -- Weight/priority of the course
+
+    CONSTRAINT fk_eligible_program
+        FOREIGN KEY (ProgramID)
+        REFERENCES Program(ProgramID)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+
+    CONSTRAINT fk_eligible_course
+        FOREIGN KEY (CourseID)
+        REFERENCES Courses(CourseID)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+        
+    UNIQUE (ProgramID, CourseID)
+);
+
+-- 10. Reports Table (Generated reports from the coordination system)
+CREATE TABLE Reports (
+    ReportID SERIAL PRIMARY KEY,
+    StaffID INT NOT NULL,
+    ReportName VARCHAR(255) NOT NULL,
+    FilterCriteria TEXT,
+    GeneratedData TEXT, -- Stores the actual report data (can be JSON or a reference)
+    GeneratedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT fk_report_staff
+        FOREIGN KEY (StaffID)
+        REFERENCES Staff(StaffID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- 11. PreferenceStatistics Table (Summary statistics for preferences over time)
+CREATE TABLE PreferenceStatistics (
+    StatisticID SERIAL PRIMARY KEY,
+    ProgramID INT NOT NULL,
+    YearOffered INT NOT NULL,
+    TotalPreferences INT,
+    UniqueApplicants INT,
+    AcceptedCount INT,
+    DemandRate NUMERIC(5, 2),
+    
+    CONSTRAINT fk_stats_program
+        FOREIGN KEY (ProgramID)
+        REFERENCES Program(ProgramID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    UNIQUE (ProgramID, YearOffered)
+);
+
+-- 12. StudentsWithoutPreferences (Optional table to track students who haven't submitted preferences)
+CREATE TABLE StudentsWithoutPreferences (
+    StudentID INT PRIMARY KEY REFERENCES Students(StudentID) 
+        ON UPDATE CASCADE ON DELETE CASCADE
+);  -- -----------------------------------------------------------------------------
+-- Student Data System Schema
+-- Based on the "بيانات الطلاب" ERD
+-- -----------------------------------------------------------------------------
+
+-- 1. Users Table (Top-level user accounts, possibly for login)
+CREATE TABLE UserAccount (
+    AccountID SERIAL PRIMARY KEY,
+    StudentID INT UNIQUE, -- Links to the main student record
+    AdminID INT UNIQUE, -- Links to the Admin record
+    Username VARCHAR(100) UNIQUE NOT NULL,
+    Email VARCHAR(255) UNIQUE,
+    PasswordHash TEXT NOT NULL,
+    ModifiedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    -- Other fields like LastLogin, IsActive, etc.
+);
+
+-- 2. Admin Table (Administrative personnel)
+CREATE TABLE Admin (
+    AdminID SERIAL PRIMARY KEY,
+    FullName VARCHAR(255) NOT NULL,
+    Role VARCHAR(100),
+    Phone VARCHAR(50),
+    Web TEXT, -- Website/Internal link
+    PhotoURL TEXT
+    -- Other Admin attributes...
+);
+
+-- 3. Students Table (The central student entity)
+CREATE TABLE Students (
+    StudentID SERIAL PRIMARY KEY,
+    FullNameAR VARCHAR(255) NOT NULL, -- Full name in Arabic
+    FullNameEN VARCHAR(255), -- Full name in English
+    Religion VARCHAR(50),
+    BirthDate DATE,
+    Nationality VARCHAR(100),
+    ResidenceCity VARCHAR(100),
+    EnrollmentStatus VARCHAR(50), -- e.g., 'Registered', 'Graduated', 'Suspended'
+    -- Other student attributes (e.g., Financial, RFID, Insurance info)
+    FinanceReference VARCHAR(100),
+    RFID VARCHAR(50) UNIQUE,
+    InsuranceYear INT
+    -- Other fields from the diagram...
+);
+
+-- 4. Family Table (Details about the student's family members)
+CREATE TABLE Family (
+    FamilyID SERIAL PRIMARY KEY,
+    StudentID INT NOT NULL,
+    Relation VARCHAR(50) NOT NULL, -- e.g., 'Father', 'Mother', 'Guardian'
+    Job VARCHAR(100),
+    Address TEXT,
+    ContactInfo VARCHAR(100),
+    IsAlive BOOLEAN DEFAULT TRUE,
+    
+    CONSTRAINT fk_family_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Students(StudentID)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- 5. Contacts Table (Additional contact information)
+CREATE TABLE Contacts (
+    ContactID SERIAL PRIMARY KEY,
+    StudentID INT NOT NULL,
+    HomePhone VARCHAR(50),
+    Address TEXT,
+    SystemEmail VARCHAR(255),
+    Fax VARCHAR(50),
+    POCBox VARCHAR(50), -- Post Office Box
+    
+    CONSTRAINT fk_contacts_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Students(StudentID)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- 6. AcademicInfo Table (Student's academic record snapshot)
+CREATE TABLE AcademicInfo (
+    AcademicID SERIAL PRIMARY KEY,
+    StudentID INT NOT NULL,
+    Program VARCHAR(255),
+    Level INT,
+    CreditHours NUMERIC(4, 2),
+    PrevGPA NUMERIC(3, 2),
+    PrevYearGPA NUMERIC(3, 2),
+    LastCardPrintDate DATE,
+    Summaries TEXT,
+    
+    CONSTRAINT fk_academic_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Students(StudentID)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- 7. PreviousEducation Table (Records before university admission)
+CREATE TABLE PreviousEducation (
+    PrevEducID SERIAL PRIMARY KEY,
+    StudentID INT NOT NULL,
+    SchoolName VARCHAR(255),
+    GraduationType VARCHAR(100),
+    GraduationDecision VARCHAR(100),
+    TotalScore NUMERIC(5, 2),
+    TextNumber VARCHAR(50),
+    TransferApprovalNumber VARCHAR(50),
+    DocumentReferenceNumber VARCHAR(50),
+    
+    CONSTRAINT fk_preveduc_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Students(StudentID)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- 8. PreviousGrades Table (Specific grades from previous education)
+CREATE TABLE PreviousGrades (
+    GradeID SERIAL PRIMARY KEY,
+    StudentID INT NOT NULL,
+    QualificationType VARCHAR(100),
+    SubjectName VARCHAR(255),
+    Score NUMERIC(5, 2),
+    
+    CONSTRAINT fk_prevgrade_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Students(StudentID)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- 9. MedicalCheckup Table (Medical history and checkup records)
+CREATE TABLE MedicalCheckup (
+    CheckupID SERIAL PRIMARY KEY,
+    StudentID INT NOT NULL,
+    DoctorName VARCHAR(255),
+    Diagnosis TEXT,
+    Operation TEXT,
+    Vaccines TEXT,
+    Email VARCHAR(255),
+    ExampleDetails TEXT,
+    
+    CONSTRAINT fk_medical_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Students(StudentID)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- 10. EnrollmentStatusHistory Table (Historical changes to student enrollment status)
+CREATE TABLE EnrollmentStatusHistory (
+    HistoryID SERIAL PRIMARY KEY,
+    StudentID INT NOT NULL,
+    ActionDate DATE NOT NULL,
+    AcademicYear INT NOT NULL,
+    PreviousStatus VARCHAR(50),
+    CurrentStatus VARCHAR(50) NOT NULL,
+    ApprovalNumber VARCHAR(50),
+    ActionReason TEXT,
+    AdminID INT REFERENCES Admin(AdminID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    CONSTRAINT fk_history_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Students(StudentID)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- 11. ActivityLog Table (Tracking actions performed by students/admins)
+CREATE TABLE ActivityLog (
+    LogID SERIAL PRIMARY KEY,
+    StudentID INT REFERENCES Students(StudentID)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    AdminID INT REFERENCES Admin(AdminID)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    ActionType VARCHAR(100) NOT NULL, -- e.g., 'Password Change', 'Enrollment Update'
+    ActionDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    Details TEXT
+);
+
+-- 12. Reports Table (Generic reports generated from the system)
+CREATE TABLE Reports (
+    ReportID SERIAL PRIMARY KEY,
+    ReportType VARCHAR(100) NOT NULL,
+    ReportName VARCHAR(255),
+    CreatedByAdminID INT REFERENCES Admin(AdminID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    ReportDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    Content TEXT
+);
+
+-- 13. Statistics Table (Summary statistics related to student data)
+CREATE TABLE Statistics (
+    StatisticID SERIAL PRIMARY KEY,
+    StudentID INT NOT NULL,
+    StatType VARCHAR(100) NOT NULL, -- e.g., 'Attendance Rate', 'Course Failure Count'
+    Level INT,
+    Count NUMERIC(10, 2),
+    
+    CONSTRAINT fk_stats_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Students(StudentID)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- Final FK relationships for UserAccount (linking to Students and Admin)
+ALTER TABLE UserAccount
+ADD CONSTRAINT fk_useraccount_student
+    FOREIGN KEY (StudentID)
+    REFERENCES Students(StudentID)
+    ON UPDATE CASCADE ON DELETE CASCADE;
+
+ALTER TABLE UserAccount
+ADD CONSTRAINT fk_useraccount_admin
+    FOREIGN KEY (AdminID)
+    REFERENCES Admin(AdminID)
+    ON UPDATE CASCADE ON DELETE CASCADE;  -- -----------------------------------------------------------------------------
+-- Academic Registration System Schema
+-- Based on the "التسجيل الأكاديمي" ERD
+-- -----------------------------------------------------------------------------
+
+-- Core Entity Tables
+
+-- 1. Staff Table (Faculty and other academic staff)
+CREATE TABLE Staff (
+    StaffID SERIAL PRIMARY KEY,
+    FacultyID INT, -- FK to the Faculty the staff belongs to
+    NationalID VARCHAR(50) UNIQUE,
+    Name VARCHAR(255) NOT NULL,
+    Phone VARCHAR(50),
+    Email VARCHAR(255)
+    -- Other Staff attributes...
+);
+
+-- 2. Faculties Table (Top-level academic units)
+CREATE TABLE Faculties (
+    FacultyID SERIAL PRIMARY KEY,
+    FacultyName VARCHAR(255) UNIQUE NOT NULL
+    -- Other Faculty attributes...
+);
+
+-- 3. Programs Table (Academic programs offered by faculties)
+CREATE TABLE Programs (
+    ProgramID SERIAL PRIMARY KEY,
+    FacultyID INT NOT NULL,
+    ProgramName VARCHAR(255) NOT NULL,
+    ProgramCode VARCHAR(50) UNIQUE NOT NULL,
+    
+    CONSTRAINT fk_program_faculty
+        FOREIGN KEY (FacultyID)
+        REFERENCES Faculties(FacultyID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- 4. Student Table (Central student information)
+CREATE TABLE Student (
+    StudentID SERIAL PRIMARY KEY,
+    ProgramID INT NOT NULL,
+    FacultyID INT NOT NULL,
+    NationalID VARCHAR(50) UNIQUE,
+    Name VARCHAR(255) NOT NULL,
+    EnrollmentYear INT,
+    Status VARCHAR(50), -- e.g., 'Active', 'Suspended'
+    Level INT,
+    TotalCredit NUMERIC(4, 2),
+    GPA NUMERIC(3, 2),
+    
+    CONSTRAINT fk_student_program
+        FOREIGN KEY (ProgramID)
+        REFERENCES Programs(ProgramID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    CONSTRAINT fk_student_faculty
+        FOREIGN KEY (FacultyID)
+        REFERENCES Faculties(FacultyID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- 5. Courses Table (Definition of academic courses)
+CREATE TABLE Courses (
+    CourseID SERIAL PRIMARY KEY,
+    ProgramID INT NOT NULL,
+    CourseCode VARCHAR(20) UNIQUE NOT NULL,
+    CourseName VARCHAR(255) NOT NULL,
+    CourseType VARCHAR(50), -- e.g., 'Mandatory', 'Elective'
+    CreditHours NUMERIC(4, 2) NOT NULL,
+    LectureHours INT,
+    LabHours INT,
+    
+    CONSTRAINT fk_course_program
+        FOREIGN KEY (ProgramID)
+        REFERENCES Programs(ProgramID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    -- Self-referencing FK for prerequisite courses
+    PrerequisiteCourseID INT REFERENCES Courses(CourseID) 
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- Linking and Transactional Tables
+
+-- 6. Schedules Table (Specific offerings of a course in a term)
+CREATE TABLE Schedules (
+    ScheduleID SERIAL PRIMARY KEY,
+    CourseID INT NOT NULL,
+    GroupID VARCHAR(50), -- Specific section/group
+    Day VARCHAR(20),
+    Location VARCHAR(100),
+    StartTime TIME,
+    EndTime TIME,
+    
+    CONSTRAINT fk_schedule_course
+        FOREIGN KEY (CourseID)
+        REFERENCES Courses(CourseID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- 7. Registrations Table (Student enrollment in a course schedule)
+CREATE TABLE Registrations (
+    RegistrationID SERIAL PRIMARY KEY,
+    CourseID INT NOT NULL,
+    StudentID INT NOT NULL,
+    AcademicYear INT NOT NULL,
+    Semester VARCHAR(20) NOT NULL,
+    Grade VARCHAR(10),
+    Attempt INT DEFAULT 1, -- Attempt number (1st, 2nd, etc.)
+    RegistrationStatus VARCHAR(50), -- e.g., 'Registered', 'Dropped', 'Withdrawn'
+    RegistrationDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT fk_reg_course
+        FOREIGN KEY (CourseID)
+        REFERENCES Courses(CourseID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    CONSTRAINT fk_reg_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Student(StudentID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    UNIQUE (CourseID, StudentID, AcademicYear, Semester, Attempt) -- Ensure unique registration attempt
+);
+
+-- 8. RegistrationBlocks Table (Reasons why a student might be blocked from registration)
+CREATE TABLE RegistrationBlocks (
+    BlockID SERIAL PRIMARY KEY,
+    RegistrationID INT NOT NULL,
+    StudentID INT NOT NULL,
+    BlockStatus VARCHAR(50) NOT NULL, -- e.g., 'Active', 'Resolved'
+    BlockDate DATE DEFAULT CURRENT_DATE,
+    
+    CONSTRAINT fk_block_registration
+        FOREIGN KEY (RegistrationID)
+        REFERENCES Registrations(RegistrationID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    CONSTRAINT fk_block_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Student(StudentID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- 9. BlockReasons Table (Reference table for block reasons)
+CREATE TABLE BlockReasons (
+    ReasonID SERIAL PRIMARY KEY,
+    BlockID INT NOT NULL,
+    ReasonDescription TEXT NOT NULL,
+    
+    CONSTRAINT fk_reason_block
+        FOREIGN KEY (BlockID)
+        REFERENCES RegistrationBlocks(BlockID)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- 10. GradeHistory Table (Tracks changes in course grades)
+CREATE TABLE GradeHistory (
+    HistoryID SERIAL PRIMARY KEY,
+    RegistrationID INT NOT NULL,
+    ChangedByStaffID INT NOT NULL,
+    OldGrade VARCHAR(10),
+    NewGrade VARCHAR(10),
+    ChangeDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    Reason TEXT,
+    
+    CONSTRAINT fk_hist_registration
+        FOREIGN KEY (RegistrationID)
+        REFERENCES Registrations(RegistrationID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    CONSTRAINT fk_hist_staff
+        FOREIGN KEY (ChangedByStaffID)
+        REFERENCES Staff(StaffID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- Advisory Tables
+
+-- 11. Advisors Table (Academic advisors)
+CREATE TABLE Advisors (
+    AdvisorID SERIAL PRIMARY KEY,
+    StaffID INT UNIQUE NOT NULL,
+    Name VARCHAR(255),
+    NationalID VARCHAR(50) UNIQUE,
+    Position VARCHAR(100),
+    
+    CONSTRAINT fk_advisor_staff
+        FOREIGN KEY (StaffID)
+        REFERENCES Staff(StaffID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- 12. AdvisorAssignments Table (Assigns students to advisors)
+CREATE TABLE AdvisorAssignments (
+    AssignmentID SERIAL PRIMARY KEY,
+    AdvisorID INT NOT NULL,
+    StudentID INT NOT NULL,
+    ReasonID INT, -- FK to a separate reason table if needed
+    StartDate DATE NOT NULL,
+    EndDate DATE,
+    
+    CONSTRAINT fk_assign_advisor
+        FOREIGN KEY (AdvisorID)
+        REFERENCES Advisors(AdvisorID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    CONSTRAINT fk_assign_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Student(StudentID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    UNIQUE (StudentID, StartDate) -- Student can only have one primary assignment at a time
+);
+
+-- Reporting Tables
+
+-- 13. AcademicReports Table (Generated academic reports)
+CREATE TABLE AcademicReports (
+    ReportID SERIAL PRIMARY KEY,
+    StudentID INT NOT NULL,
+    GeneratedByStaffID INT NOT NULL,
+    PaperName VARCHAR(255),
+    PaperType VARCHAR(50),
+    Parameters TEXT, -- Stores parameters used to generate the report (e.g., term, year)
+    GeneratedDate TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT fk_report_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Student(StudentID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    CONSTRAINT fk_report_staff
+        FOREIGN KEY (GeneratedByStaffID)
+        REFERENCES Staff(StaffID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- 14. ActivityLog Table (System audit log)
+CREATE TABLE ActivityLog (
+    LogID SERIAL PRIMARY KEY,
+    StaffID INT REFERENCES Staff(StaffID) 
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    ActionType VARCHAR(100) NOT NULL,
+    ActionCode VARCHAR(50),
+    TargetTable VARCHAR(50),
+    TargetID INT,
+    Details TEXT,
+    
+    CONSTRAINT fk_log_staff
+        FOREIGN KEY (StaffID)
+        REFERENCES Staff(StaffID)
+        ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+-- Final Staff-Faculty Link (Staff to Faculties)
+ALTER TABLE Staff
+ADD CONSTRAINT fk_staff_faculty
+    FOREIGN KEY (FacultyID)
+    REFERENCES Faculties(FacultyID)
+    ON UPDATE CASCADE ON DELETE RESTRICT; -- -----------------------------------------------------------------------------
+-- Exams Management System Schema
+-- Based on the "تعليم و امتحانات" ERD
+-- -----------------------------------------------------------------------------
+
+-- Core Entity Tables
+
+-- 1. Student Table (Central student information, simplified for this context)
+CREATE TABLE Student (
+    StudentID SERIAL PRIMARY KEY,
+    Name VARCHAR(255) NOT NULL,
+    Program VARCHAR(100),
+    Department VARCHAR(100),
+    Level INT
+    -- Other student attributes...
+);
+
+-- 2. Course Table (Definition of academic courses)
+CREATE TABLE Course (
+    CourseID SERIAL PRIMARY KEY,
+    CourseCode VARCHAR(20) UNIQUE NOT NULL,
+    CourseName VARCHAR(255) NOT NULL,
+    Department VARCHAR(100)
+    -- Other course attributes...
+);
+
+-- 3. ExamCommittees Table (Groups responsible for setting/supervising exams)
+CREATE TABLE ExamCommittees (
+    CommitteeID SERIAL PRIMARY KEY,
+    CommitteeName VARCHAR(255) NOT NULL,
+    Location VARCHAR(100),
+    Capacity INT, -- Max capacity of the examination hall/committee
+    ExamDate DATE,
+    ExamTime TIME
+    -- Other committee attributes...
+);
+
+-- Linking and Transactional Tables
+
+-- 4. ExamPaper Table (Details about a specific exam paper)
+CREATE TABLE ExamPaper (
+    PaperID SERIAL PRIMARY KEY,
+    CourseID INT NOT NULL,
+    CommitteeID INT NOT NULL,
+    Quantity INT, -- Number of copies printed
+    ExamDate DATE,
+    
+    CONSTRAINT fk_paper_course
+        FOREIGN KEY (CourseID)
+        REFERENCES Course(CourseID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    CONSTRAINT fk_paper_committee
+        FOREIGN KEY (CommitteeID)
+        REFERENCES ExamCommittees(CommitteeID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- 5. CommitteeSeats Table (Manages seat availability within a committee's location)
+CREATE TABLE CommitteeSeats (
+    SeatID SERIAL PRIMARY KEY,
+    CommitteeID INT NOT NULL,
+    TotalSeats INT NOT NULL,
+    AvailableSeats INT NOT NULL,
+    
+    CONSTRAINT fk_seats_committee
+        FOREIGN KEY (CommitteeID)
+        REFERENCES ExamCommittees(CommitteeID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- 6. StudentCommitteeAssignments Table (Assigns a student to a specific exam committee/seat)
+CREATE TABLE StudentCommitteeAssignments (
+    AssignmentID SERIAL PRIMARY KEY,
+    StudentID INT NOT NULL,
+    CommitteeID INT NOT NULL,
+    SeatNumber VARCHAR(50),
+    
+    CONSTRAINT fk_assign_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Student(StudentID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    CONSTRAINT fk_assign_committee
+        FOREIGN KEY (CommitteeID)
+        REFERENCES ExamCommittees(CommitteeID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    UNIQUE (StudentID, CommitteeID)
+);
+
+-- 7. StudentExamSchedule (Specific schedule details for a student's exam)
+CREATE TABLE StudentExamSchedule (
+    ScheduleID SERIAL PRIMARY KEY,
+    StudentID INT NOT NULL,
+    CourseID INT NOT NULL,
+    CommitteeID INT NOT NULL,
+    SeatNumber VARCHAR(50),
+    ExamDate DATE,
+    ExamTime TIME,
+    
+    CONSTRAINT fk_schedule_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Student(StudentID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    CONSTRAINT fk_schedule_course
+        FOREIGN KEY (CourseID)
+        REFERENCES Course(CourseID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    CONSTRAINT fk_schedule_committee
+        FOREIGN KEY (CommitteeID)
+        REFERENCES ExamCommittees(CommitteeID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- 8. StudentExamStatus Table (Tracks the student's status for a specific course exam)
+CREATE TABLE StudentExamStatus (
+    StatusID SERIAL PRIMARY KEY,
+    StudentID INT NOT NULL,
+    CourseID INT NOT NULL,
+    Status VARCHAR(50), -- e.g., 'Passed', 'Failed', 'Absent', 'Pending Grading'
+    
+    CONSTRAINT fk_status_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Student(StudentID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    CONSTRAINT fk_status_course
+        FOREIGN KEY (CourseID)
+        REFERENCES Course(CourseID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    UNIQUE (StudentID, CourseID)
+);
+
+-- 9. AnswerBookletDelivery Table (Logistics of delivering and receiving exam booklets)
+CREATE TABLE AnswerBookletDelivery (
+    DeliveryID SERIAL PRIMARY KEY,
+    CommitteeID INT NOT NULL,
+    DeliveredBy VARCHAR(255), -- Name/ID of person delivering
+    ReceivedBy VARCHAR(255), -- Name/ID of person receiving
+    DeliveryDate TIMESTAMP WITHOUT TIME ZONE,
+    ReceiveDate TIMESTAMP WITHOUT TIME ZONE,
+    
+    CONSTRAINT fk_delivery_committee
+        FOREIGN KEY (CommitteeID)
+        REFERENCES ExamCommittees(CommitteeID)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- Reporting Tables
+
+-- 10. ExamDaysReport Table (Summary report on exams scheduled on a specific day)
+CREATE TABLE ExamDaysReport (
+    ReportID SERIAL PRIMARY KEY,
+    CommitteeID INT NOT NULL,
+    ExamDate DATE NOT NULL,
+    TotalExams INT,
+    
+    CONSTRAINT fk_report_committee
+        FOREIGN KEY (CommitteeID)
+        REFERENCES ExamCommittees(CommitteeID)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+        
+    UNIQUE (CommitteeID, ExamDate)
+);
+
+-- 11. StudentWithoutCommittee (Tracks students who are registered for an exam but not yet assigned to a committee)
+CREATE TABLE StudentWithoutCommittee (
+    StudentID INT PRIMARY KEY,
+    
+    CONSTRAINT fk_no_committee_student
+        FOREIGN KEY (StudentID)
+        REFERENCES Student(StudentID)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);

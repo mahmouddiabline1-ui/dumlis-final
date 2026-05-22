@@ -1,0 +1,40 @@
+{
+  "name": "dumlis---student-affairs-system",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "serve": "vite preview",
+    "test:unit": "vitest run tests/unit",
+    "test:unit:watch": "vitest tests/unit",
+    "test:e2e": "playwright test tests/e2e",
+    "test:backend": "cd backend && python -m pytest tests/backend -v --cov=app --cov-report=term-missing",
+    "test:all": "npm run test:unit && npm run test:e2e"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.2.2",
+    "lucide-react": "^0.554.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "recharts": "^3.5.0",
+    "tailwindcss": "^4.2.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@testing-library/jest-dom": "^6.4.0",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "baseline-browser-mapping": "^2.10.21",
+    "jsdom": "^24.0.0",
+    "msw": "^2.3.5",
+    "playwright": "^1.47.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0",
+    "vitest": "^1.6.0"
+  }
+}

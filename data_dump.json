@@ -1,0 +1,189 @@
+{
+  "faculties": [
+    {
+      "id": "AGR",
+      "name": "كلية الزراعة",
+      "name_en": "Faculty of Agriculture",
+      "student_count": 2800,
+      "staff_count": 140,
+      "color": "bg-lime-600",
+      "icon": "🌾"
+    },
+    {
+      "id": "ART",
+      "name": "كلية الآداب",
+      "name_en": "Faculty of Arts",
+      "student_count": 4500,
+      "staff_count": 180,
+      "color": "bg-orange-600",
+      "icon": "📖"
+    },
+    {
+      "id": "COM",
+      "name": "كلية التجارة",
+      "name_en": "Faculty of Commerce",
+      "student_count": 375,
+      "staff_count": 300,
+      "color": "bg-yellow-600",
+      "icon": "📊"
+    },
+    {
+      "id": "EDU",
+      "name": "كلية التربية",
+      "name_en": "Faculty of Education",
+      "student_count": 375,
+      "staff_count": 200,
+      "color": "bg-red-600",
+      "icon": "📚"
+    },
+    {
+      "id": "ENG",
+      "name": "كلية الهندسة",
+      "name_en": "Faculty of Engineering",
+      "student_count": 375,
+      "staff_count": 180,
+      "color": "bg-purple-600",
+      "icon": "⚙️"
+    },
+    {
+      "id": "FCAI",
+      "name": "كلية الحاسبات والذكاء الاصطناعي",
+      "name_en": "Faculty of Computers and AI",
+      "student_count": 2000,
+      "staff_count": 120,
+      "color": "bg-blue-600",
+      "icon": "💻"
+    },
+    {
+      "id": "LAW",
+      "name": "كلية الحقوق",
+      "name_en": "Faculty of Law",
+      "student_count": 3000,
+      "staff_count": 120,
+      "color": "bg-gray-600",
+      "icon": "⚖️"
+    },
+    {
+      "id": "MED",
+      "name": "كلية الطب",
+      "name_en": "Faculty of Medicine",
+      "student_count": 1500,
+      "staff_count": 150,
+      "color": "bg-pink-600",
+      "icon": "🏥"
+    },
+    {
+      "id": "NRS",
+      "name": "كلية التمريض",
+      "name_en": "Faculty of Nursing",
+      "student_count": 2000,
+      "staff_count": 110,
+      "color": "bg-teal-600",
+      "icon": "🏥"
+    },
+    {
+      "id": "PHR",
+      "name": "كلية الصيدلة",
+      "name_en": "Faculty of Pharmacy",
+      "student_count": 1200,
+      "staff_count": 100,
+      "color": "bg-indigo-600",
+      "icon": "💊"
+    },
+    {
+      "id": "SCI",
+      "name": "كلية العلوم",
+      "name_en": "Faculty of Science",
+      "student_count": 375,
+      "staff_count": 250,
+      "color": "bg-green-600",
+      "icon": "🔬"
+    }
+  ],
+  "users": [
+    {
+      "id": "c27014b3-9551-464c-affb-3b52097fe456",
+      "username": "admin_agr",
+      "email": "admin_agr@du.edu.eg",
+      "role": "faculty_admin",
+      "faculty_id": "AGR"
+    },
+    {
+      "id": "059f8b6f-06d7-4b56-a3cc-9e9c23448372",
+      "username": "admin_art",
+      "email": "admin_art@du.edu.eg",
+      "role": "faculty_admin",
+      "faculty_id": "ART"
+    },
+    {
+      "id": "fc897da6-f5cb-4311-9d7e-6b9ce71f9c45",
+      "username": "admin_com",
+      "email": "admin_com@du.edu.eg",
+      "role": "faculty_admin",
+      "faculty_id": "COM"
+    },
+    {
+      "id": "9ec61db6-6217-4cf6-8152-9aebe194187b",
+      "username": "admin_edu",
+      "email": "admin_edu@du.edu.eg",
+      "role": "faculty_admin",
+      "faculty_id": "EDU"
+    },
+    {
+      "id": "debb50ac-4314-4cd5-98b5-53e9dd7d0aa5",
+      "username": "admin_eng",
+      "email": "admin_eng@du.edu.eg",
+      "role": "faculty_admin",
+      "faculty_id": "ENG"
+    },
+    {
+      "id": "cca38fc5-9f07-4500-89b8-c3a3477ff42d",
+      "username": "admin_fcai",
+      "email": "admin_fcai@du.edu.eg",
+      "role": "faculty_admin",
+      "faculty_id": "FCAI"
+    },
+    {
+      "id": "ad5cc271-8117-4638-bdf3-58a80f78a1ab",
+      "username": "admin_law",
+      "email": "admin_law@du.edu.eg",
+      "role": "faculty_admin",
+      "faculty_id": "LAW"
+    },
+    {
+      "id": "d01937af-f36f-4c2f-9007-5511bc39db41",
+      "username": "admin_med",
+      "email": "admin_med@du.edu.eg",
+      "role": "faculty_admin",
+      "faculty_id": "MED"
+    },
+    {
+      "id": "4ee771d8-0f84-45c4-9806-23b9f899372c",
+      "username": "admin_nrs",
+      "email": "admin_nrs@du.edu.eg",
+      "role": "faculty_admin",
+      "faculty_id": "NRS"
+    },
+    {
+      "id": "5c58b52b-163f-4690-b1c4-4937eea55a49",
+      "username": "admin_phr",
+      "email": "admin_phr@du.edu.eg",
+      "role": "faculty_admin",
+      "faculty_id": "PHR"
+    },
+    {
+      "id": "51f50fa1-5881-4a09-988a-e99a3181b30b",
+      "username": "admin_sci",
+      "email": "admin_sci@du.edu.eg",
+      "role": "faculty_admin",
+      "faculty_id": "SCI"
+    },
+    {
+      "id": "f8ad06e5-2ae9-41ee-9415-3ce4ebf68cce",
+      "username": "president",
+      "email": "president@du.edu.eg",
+      "role": "super_admin",
+      "faculty_id": null
+    }
+  ]
+}

@@ -1,0 +1,1029 @@
+' ============================================================================
+' DUMLIS - PlantUML Diagram Prompts
+' ============================================================================
+' This file contains all PlantUML prompts for generating DUMLIS diagrams
+' Copy each @startuml/@enduml block to generate the corresponding diagram
+' ============================================================================
+
+' ============================================================================
+' 3.3.3 CONTEXT DIAGRAM
+' ============================================================================
+@startuml 3.3.3_context_diagram
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+' ===== ACTORS =====
+rectangle "Student" as Student
+rectangle "Faculty Admin" as Admin
+rectangle "Super Admin" as SuperAdmin
+rectangle "External Analytics System" as Analytics
+rectangle "IoT / External Services" as ExternalServices
+
+' ===== SYSTEM =====
+circle "DUMLIS\nUniversity Management System" as DUMLIS
+
+' ===== STUDENT FLOWS =====
+Student --> DUMLIS : register
+Student --> DUMLIS : login
+Student --> DUMLIS : view grades
+Student --> DUMLIS : view schedule
+Student --> DUMLIS : view fees
+Student --> DUMLIS : view attendance
+Student --> DUMLIS : submit registration issue
+Student --> DUMLIS : view committee assignment
+Student --> DUMLIS : logout
+
+DUMLIS --> Student : academic data
+DUMLIS --> Student : notifications
+DUMLIS --> Student : reports
+
+' ===== FACULTY ADMIN FLOWS =====
+Admin --> DUMLIS : login
+Admin --> DUMLIS : manage students
+Admin --> DUMLIS : manage courses
+Admin --> DUMLIS : enter grades
+Admin --> DUMLIS : enter attendance
+Admin --> DUMLIS : manage schedules
+Admin --> DUMLIS : generate reports
+Admin --> DUMLIS : manage exam committees
+Admin --> DUMLIS : global search
+
+DUMLIS --> Admin : attendance records
+DUMLIS --> Admin : student reports
+DUMLIS --> Admin : activity logs
+
+' ===== SUPER ADMIN FLOWS =====
+SuperAdmin --> DUMLIS : login
+SuperAdmin --> DUMLIS : manage academic structure
+SuperAdmin --> DUMLIS : system configuration
+SuperAdmin --> DUMLIS : view faculty analytics
+
+DUMLIS --> SuperAdmin : analytics reports
+DUMLIS --> SuperAdmin : system status
+
+' ===== EXTERNAL SYSTEM FLOWS =====
+Analytics --> DUMLIS : performance data
+DUMLIS --> Analytics : academic statistics
+
+ExternalServices --> DUMLIS : external services data
+DUMLIS --> ExternalServices : service requests
+
+@enduml
+
+' ============================================================================
+' 3.3.1 USE CASE DIAGRAM
+' ============================================================================
+@startuml 3.3.1_use_case_diagram
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor "Super Admin" as SuperAdmin
+actor "Faculty Admin" as FacultyAdmin
+actor "Student" as Student
+
+rectangle "DUMLIS System" {
+  ' Super Admin Use Cases
+  package "Super Admin Functions" {
+    usecase "View All Faculties" as UC1
+    usecase "View Faculty Analytics" as UC2
+    usecase "Manage Academic Structure" as UC3
+    usecase "System Configuration" as UC4
+  }
+  
+  ' Faculty Admin Use Cases
+  package "Student Management" {
+    usecase "Manage Students Data" as UC5
+    usecase "Student Registration" as UC6
+    usecase "Student Data Management" as UC7
+    usecase "Advanced Student Search" as UC8
+  }
+  
+  package "Academic Management" {
+    usecase "Academic Registration" as UC9
+    usecase "Manage Study Programs" as UC10
+    usecase "Course Management" as UC11
+    usecase "Manage Schedules" as UC12
+  }
+  
+  package "Grades & Attendance" {
+    usecase "Enter Grades" as UC13
+    usecase "Enter Attendance" as UC14
+    usecase "View Attendance Records" as UC15
+    usecase "Manage Exam Committees" as UC16
+  }
+  
+  package "Committee Management" {
+    usecase "Define Committees" as UC17
+    usecase "Distribute Students" as UC18
+    usecase "Generate Seating Numbers" as UC19
+    usecase "Auto-Generate Committees" as UC20
+  }
+  
+  package "Financial & Reports" {
+    usecase "Manage Fees" as UC21
+    usecase "View Reports" as UC22
+    usecase "Financial Reports" as UC23
+    usecase "View Activity Log" as UC24
+  }
+  
+  package "System Management" {
+    usecase "Global Search" as UC25
+    usecase "Manage Report Signatures" as UC26
+    usecase "Upload Courses" as UC27
+    usecase "System Edit" as UC28
+  }
+  
+  ' Student Use Cases
+  package "Student Functions" {
+    usecase "View Academic Registration" as UC29
+    usecase "View Grades" as UC30
+    usecase "View Fees" as UC31
+    usecase "View ID Card" as UC32
+    usecase "View Schedule" as UC33
+    usecase "View Attendance" as UC34
+    usecase "Submit Registration Issue" as UC35
+    usecase "View Academic Warnings" as UC36
+    usecase "View Committee Assignment" as UC37
+    usecase "View Seating Number" as UC38
+    usecase "Personal Data" as UC39
+    usecase "University Services" as UC40
+  }
+}
+
+' Relationships
+SuperAdmin --> UC1
+SuperAdmin --> UC2
+SuperAdmin --> UC3
+SuperAdmin --> UC4
+
+FacultyAdmin --> UC5
+FacultyAdmin --> UC6
+FacultyAdmin --> UC7
+FacultyAdmin --> UC8
+FacultyAdmin --> UC9
+FacultyAdmin --> UC10
+FacultyAdmin --> UC11
+FacultyAdmin --> UC12
+FacultyAdmin --> UC13
+FacultyAdmin --> UC14
+FacultyAdmin --> UC15
+FacultyAdmin --> UC16
+FacultyAdmin --> UC17
+FacultyAdmin --> UC18
+FacultyAdmin --> UC19
+FacultyAdmin --> UC20
+FacultyAdmin --> UC21
+FacultyAdmin --> UC22
+FacultyAdmin --> UC23
+FacultyAdmin --> UC24
+FacultyAdmin --> UC25
+FacultyAdmin --> UC26
+FacultyAdmin --> UC27
+FacultyAdmin --> UC28
+
+Student --> UC29
+Student --> UC30
+Student --> UC31
+Student --> UC32
+Student --> UC33
+Student --> UC34
+Student --> UC35
+Student --> UC36
+Student --> UC37
+Student --> UC38
+Student --> UC39
+Student --> UC40
+
+@enduml
+
+' ============================================================================
+' 3.3.2 ENTITY RELATIONSHIP DIAGRAM (ERD)
+' ============================================================================
+@startuml 3.3.2_erd_diagram
+skinparam shadowing false
+skinparam linetype ortho
+skinparam class {
+  BackgroundColor LightYellow
+  BorderColor Black
+}
+
+class User {
+  * id : PK
+  --
+  * name
+  * role
+  faculty : FK
+}
+
+class Student {
+  * student_id : PK
+  --
+  * name
+  * national_id
+  * faculty_code : FK
+  department
+  level
+  gpa
+  status
+  regulation
+}
+
+class Faculty {
+  * id : PK
+  --
+  * name
+  * code
+  student_count
+  staff_count
+}
+
+class AcademicFaculty {
+  * id : PK
+  --
+  * name
+  * code
+  dean_id
+  departments
+}
+
+class AcademicDepartment {
+  * id : PK
+  --
+  * name
+  * code
+  * faculty_id : FK
+  head_id
+  programs
+}
+
+class AcademicProgram {
+  * id : PK
+  --
+  * name
+  * code
+  * degree
+  * department_id : FK
+  total_hours
+  mandatory_hours
+  elective_hours
+  tracks
+}
+
+class StudyRegulation {
+  * id : PK
+  --
+  * name
+  * program_id : FK
+  registration_rules
+  pass_fail_rules
+  absence_policy
+}
+
+class AcademicRules {
+  * id : PK
+  --
+  * faculty_id : FK
+  faculty_name
+  study_system
+  graduation_requirements
+  level_progression
+  evaluation_system
+  retake_rules
+  program_change
+  scientific_trips
+  created_at
+  updated_at
+}
+
+class AcademicCourse {
+  * id : PK
+  --
+  * code
+  * name
+  * program_id : FK
+  theoretical_hours
+  practical_hours
+  credit_hours
+  level
+  type
+  prerequisites
+}
+
+class Schedule {
+  * schedule_id : PK
+  --
+  * course_id : FK
+  semester
+  academic_year
+  * faculty : FK
+  level
+  room
+  room_type
+  room_capacity
+  instructor
+  day
+  time
+}
+
+class Enrollment {
+  * enrollment_id : PK
+  --
+  * student_id : FK
+  * course_code : FK
+  group
+  registration_date
+  status
+}
+
+class RegistrationIssue {
+  * req_id : PK
+  --
+  * student_id : FK
+  date
+  comment
+  status
+}
+
+class Grade {
+  * grade_id : PK
+  --
+  * student_id : FK
+  * course_code : FK
+  semester
+  grade
+  points
+}
+
+class Attendance {
+  * attendance_id : PK
+  --
+  * student_id : FK
+  * course
+  session_type
+  week
+  status
+  date
+}
+
+class Fees {
+  * fee_id : PK
+  --
+  * student_id : FK
+  item
+  amount
+  paid
+  remaining
+  status
+}
+
+class StudentProfile {
+  * id : PK
+  --
+  * student_id : FK
+  personal_data
+  contact_data
+  family_data
+  qualification_data
+  military_data
+  medical_data
+}
+
+class Committee {
+  * id : PK
+  --
+  * name
+  * course_id : FK
+  * room_id : FK
+  capacity
+  assigned_students
+  status
+  seating_arrangement
+}
+
+class StudentCommitteeAssignment {
+  * id : PK
+  --
+  * student_id : FK
+  * committee_id : FK
+  seat_number
+  row
+  column
+  exam_date
+  exam_time
+}
+
+class Classroom {
+  * id : PK
+  --
+  * code
+  * name
+  type
+  capacity
+  building
+  floor
+  status
+}
+
+class Lab {
+  * id : PK
+  --
+  * code
+  * name
+  type
+  capacity
+  equipment
+  status
+}
+
+class ActivityLog {
+  * id : PK
+  --
+  timestamp
+  user
+  action
+  entity
+  details
+  faculty
+}
+
+class ReportSignature {
+  * id : PK
+  --
+  report_name
+  signatory_name
+  title
+  order
+  is_active
+}
+
+' Relationships
+User "1" --> "0..*" Student : "has role"
+Faculty "1" --> "0..*" Student : "belongs to"
+AcademicFaculty "1" --> "0..*" AcademicDepartment : "contains"
+AcademicDepartment "1" --> "0..*" AcademicProgram : "has"
+AcademicProgram "1" --> "0..1" StudyRegulation : "follows"
+Faculty "1" --> "0..*" AcademicRules : "defines rules"
+AcademicRules "1" --> "0..*" AcademicCourse : "contains courses"
+AcademicProgram "1" --> "0..*" AcademicCourse : "has"
+AcademicCourse "1" --> "0..*" Schedule : "scheduled in"
+Student "1" --> "0..*" Enrollment : "enrolls"
+AcademicCourse "1" --> "0..*" Enrollment : "enrolled by"
+Student "1" --> "0..*" Grade : "receives"
+AcademicCourse "1" --> "0..*" Grade : "graded for"
+Student "1" --> "0..*" Attendance : "has"
+AcademicCourse "1" --> "0..*" Attendance : "attended in"
+Student "1" --> "0..*" Fees : "has"
+Student "1" --> "0..1" StudentProfile : "has profile"
+Student "1" --> "0..*" RegistrationIssue : "has"
+AcademicCourse "1" --> "0..*" Committee : "examined in"
+Student "1" --> "0..*" StudentCommitteeAssignment : "assigned to"
+Committee "1" --> "0..*" StudentCommitteeAssignment : "has assignment"
+Committee "0..*" --> "1" Classroom : "uses room"
+Committee "0..*" --> "1" Lab : "uses lab"
+
+@enduml
+
+' ============================================================================
+' 3.3.4.1 DFD LEVEL 0 (CONTEXT DIAGRAM AS DFD)
+' ============================================================================
+@startuml 3.3.4.1_dfd_level0
+left to right direction
+skinparam shadowing false
+
+rectangle "DUMLIS System\n0.0" as System
+
+entity "Super Admin" as SuperAdmin
+entity "Faculty Admin" as FacultyAdmin
+entity "Student" as Student
+
+database "Student Database\nD1" as StudentDB
+database "Course Database\nD2" as CourseDB
+database "Enrollment Database\nD3" as EnrollmentDB
+database "Grades Database\nD4" as GradesDB
+database "Attendance Database\nD5" as AttendanceDB
+database "Academic Structure\nD6" as AcademicStructure
+database "Academic Rules\nD7" as AcademicRules
+database "Report Signatures\nD8" as ReportSignatures
+
+SuperAdmin --> System : View Request
+System --> SuperAdmin : Analytics Data
+
+FacultyAdmin --> System : Manage Request
+System --> FacultyAdmin : Confirmation
+
+Student --> System : View Request
+System --> Student : Student Data
+
+System --> StudentDB : Student Data
+StudentDB --> System : Retrieve Data
+
+System --> CourseDB : Course Data
+CourseDB --> System : Course Info
+
+System --> EnrollmentDB : Enrollment Data
+EnrollmentDB --> System : Enrollment Info
+
+System --> GradesDB : Grades Data
+GradesDB --> System : Grades Info
+
+System --> AttendanceDB : Attendance Data
+AttendanceDB --> System : Attendance Info
+
+System --> AcademicStructure : Structure Data
+AcademicStructure --> System : Structure Info
+
+System --> AcademicRules : Rules Data
+AcademicRules --> System : Rules Info
+
+System --> ReportSignatures : Signature Data
+ReportSignatures --> System : Signature Info
+
+@enduml
+
+' ============================================================================
+' 3.3.4.2 DFD LEVEL 1
+' ============================================================================
+@startuml 3.3.4.2_dfd_level1
+left to right direction
+skinparam shadowing false
+
+rectangle "DUMLIS System" {
+  rectangle "1.0\nStudent\nManagement" as P1
+  rectangle "2.0\nRegistration\nManagement" as P2
+  rectangle "3.0\nGrade\nManagement" as P3
+  rectangle "4.0\nSchedule\nManagement" as P4
+  rectangle "5.0\nFees\nManagement" as P5
+  rectangle "6.0\nReport\nGeneration" as P6
+  rectangle "7.0\nActivity\nLogging" as P7
+  rectangle "8.0\nSystem\nAdministration" as P8
+  rectangle "9.0\nAttendance\nManagement" as P9
+  rectangle "10.0\nAcademic\nStructure" as P10
+  rectangle "11.0\nAcademic\nRules\nManagement" as P11
+  rectangle "12.0\nGlobal\nSearch" as P12
+  rectangle "13.0\nCommittee\nDefinition" as P13
+  rectangle "14.0\nStudent\nDistribution" as P14
+  rectangle "15.0\nSeating\nNumbers" as P15
+}
+
+entity "Admin" as Admin
+entity "Student" as Student
+
+database "D1\nStudent\nDB" as D1
+database "D2\nEnrollment\nDB" as D2
+database "D3\nGrades\nDB" as D3
+database "D4\nFees\nDB" as D4
+database "D5\nCourses\nDB" as D5
+database "D6\nActivity\nLog" as D6
+database "D7\nAttendance\nDB" as D7
+database "D8\nAcademic\nStructure" as D8
+database "D9\nAcademic\nRules" as D9
+database "D10\nReport\nSignatures" as D10
+database "D11\nCommittees\nDB" as D11
+database "D12\nClassrooms\n& Labs" as D12
+database "D13\nSeating\nAssignments" as D13
+
+Admin --> P1 : Student Data
+P1 --> D1 : Store
+D1 --> P1 : Retrieve
+
+P1 --> P2 : Student Info
+P2 --> D2 : Enrollment
+D2 --> P2 : Enrollment Data
+
+P3 --> D3 : Grades
+D3 --> P3 : Grade Data
+
+P5 --> D4 : Fees
+D4 --> P5 : Fee Data
+
+P9 --> D7 : Attendance
+D7 --> P9 : Attendance Data
+
+P10 --> D8 : Structure
+D8 --> P10 : Structure Data
+
+P11 --> D9 : Rules
+D9 --> P11 : Rules Data
+
+P13 --> D11 : Committees
+D11 --> P13 : Committee Data
+
+P14 --> D12 : Rooms
+D12 --> P14 : Room Data
+
+P15 --> D13 : Seating
+D13 --> P15 : Seating Data
+
+Student --> P2 : View Request
+P2 --> Student : Student Data
+
+P6 --> D6 : Log Activity
+D6 --> P6 : Activity Data
+
+@enduml
+
+' ============================================================================
+' 3.3.4.3 DFD LEVEL 2 (Registration Management)
+' ============================================================================
+@startuml 3.3.4.3_dfd_level2
+left to right direction
+skinparam shadowing false
+
+rectangle "Registration Management\n2.0" {
+  rectangle "2.1\nReceive\nRegistration\nRequest" as P2_1
+  rectangle "2.2\nValidate\nStudent\nStatus" as P2_2
+  rectangle "2.3\nCheck\nPrerequisites" as P2_3
+  rectangle "2.4\nCheck Course\nAvailability" as P2_4
+  rectangle "2.5\nProcess\nRegistration" as P2_5
+  rectangle "2.6\nHandle\nRegistration\nIssues" as P2_6
+  rectangle "2.7\nGenerate\nConfirmation" as P2_7
+  rectangle "2.8\nUpdate\nEnrollment" as P2_8
+}
+
+entity "Student" as Student
+entity "Admin" as Admin
+
+database "D1\nStudent\nDB" as D1
+database "D2\nCourse\nDB" as D2
+database "D3\nEnrollment\nDB" as D3
+database "D4\nRegistration\nIssues" as D4
+database "D5\nAcademic\nStructure" as D5
+database "D6\nSchedule\nDB" as D6
+
+Student --> P2_1 : Registration Request
+P2_1 --> P2_2 : Request Data
+P2_2 --> D1 : Validate
+D1 --> P2_2 : Student Info
+P2_2 --> P2_3 : Valid Request
+P2_3 --> D2 : Check Course
+D2 --> P2_3 : Course Info
+P2_3 --> P2_4 : Check Availability
+P2_4 --> D6 : Schedule Info
+D6 --> P2_4 : Availability Data
+P2_4 --> P2_5 : Approved
+P2_5 --> P2_8 : Store
+P2_8 --> D3 : Enrollment
+D3 --> P2_8 : Confirmation
+P2_5 --> P2_6 : Issue Data
+P2_6 --> D4 : Store Issue
+D4 --> P2_6 : Issue Info
+P2_6 --> P2_7 : Issue Details
+P2_7 --> Admin : Confirmation
+
+@enduml
+
+' ============================================================================
+' 3.3.5.1 ACTIVITY DIAGRAM - STUDENT
+' ============================================================================
+@startuml 3.3.5.1_activity_diagram_student
+start
+
+:Login to System;
+:View Dashboard;
+:Select Service;
+
+partition "Student Services" {
+  :View Academic Registration;
+  :View Grades;
+  :View Fees;
+  :View ID Card;
+  :View Schedule;
+  :View Attendance;
+  :Submit Registration Issue Form;
+  
+  if (Issue Resolved?) then (yes)
+    :View Academic Warnings;
+    stop
+  else (no)
+    :Wait for Resolution;
+    :View Academic Warnings;
+    stop
+  endif
+}
+
+stop
+
+@enduml
+
+' ============================================================================
+' 3.3.5.2 ACTIVITY DIAGRAM - FACULTY ADMIN
+' ============================================================================
+@startuml 3.3.5.2_activity_diagram_professor
+start
+
+:Login to System;
+:View Dashboard;
+:Select Tab\n(Students/Registration/etc);
+
+partition "Faculty Admin Tasks" {
+  :Manage Students Data;
+  :Enter Grades;
+  :Manage Academic Registration;
+  :Enter Attendance;
+  :Manage Schedules;
+  :Manage Courses;
+  :Manage Report Signatures;
+  :View Activity Log;
+}
+
+stop
+
+@enduml
+
+' ============================================================================
+' 3.3.5.3 ACTIVITY DIAGRAM - ADVISOR
+' ============================================================================
+@startuml 3.3.5.3_activity_diagram_advisor
+start
+
+:Login to System;
+:View Registration Requests;
+:Review Student Records;
+:Check Prerequisites;
+
+if (Approve?) then (yes)
+  :Approve Registration;
+  :Notify Student;
+  stop
+else (no)
+  :Reject Registration;
+  :Notify Student;
+  stop
+endif
+
+@enduml
+
+' ============================================================================
+' 3.3.5.4 ACTIVITY DIAGRAM - ADMINISTRATOR
+' ============================================================================
+@startuml 3.3.5.4_activity_diagram_administrator
+start
+
+:Login to System;
+:Select Action;
+
+partition "Administrator Tasks" {
+  :Manage Users;
+  :Manage Courses;
+  :System Configuration;
+  :View System Logs;
+}
+
+stop
+
+@enduml
+
+' ============================================================================
+' 3.3.5.5 ACTIVITY DIAGRAM - ABSENCE WARNING
+' ============================================================================
+@startuml 3.3.5.5_activity_diagram_absence_warning
+start
+
+:Check Student Absences;
+:Calculate Absence Rate;
+:Generate Warning;
+
+if (Rate > Threshold?) then (yes)
+  :Send Warning to Student;
+  :Notify Academic Advisor;
+  stop
+else (no)
+  :No Action Required;
+  stop
+endif
+
+@enduml
+
+' ============================================================================
+' 3.3.5.6 ACTIVITY DIAGRAM - ACADEMIC WARNING
+' ============================================================================
+@startuml 3.3.5.6_activity_diagram_academic_warning
+start
+
+:Calculate Student GPA;
+:Generate Academic Warning;
+
+if (GPA < Minimum?) then (yes)
+  :Send Warning to Student;
+  :Notify Academic Advisor;
+  :Schedule Meeting;
+  stop
+else (no)
+  :No Action Required;
+  stop
+endif
+
+@enduml
+
+' ============================================================================
+' 3.3.5.7 ACTIVITY DIAGRAM - COMMITTEE MANAGEMENT
+' ============================================================================
+@startuml 3.3.5.7_activity_diagram_committee_management
+start
+
+:Login to System;
+:Navigate to Committee\nDefinition;
+:Select Auto-Generate\nor Manual;
+
+if (Auto-Generate Selected?) then (yes)
+  :Get Student Enrollments;
+  :Group by Course;
+  :Assign to Rooms;
+  :Generate Seating\nArrangements;
+  :Save Committees\nand Assignments;
+  stop
+else (no)
+  :Manual Definition;
+  :Save Committees\nand Assignments;
+  stop
+endif
+
+@enduml
+
+' ============================================================================
+' 3.3.6.1 SEQUENCE DIAGRAM - STUDENT
+' ============================================================================
+@startuml 3.3.6.1_sequence_diagram_student
+actor Student
+participant "LoginPage" as Login
+participant "App" as App
+participant "ContentArea" as Content
+participant "Database" as DB
+
+Student -> Login : 1. Login Request
+Login -> App : 2. Authenticate
+App -> DB : 3. Verify User
+DB --> App : 4. User Data
+App -> Content : 5. Render ContentArea
+Content -> DB : 6. Fetch Student Data
+DB --> Content : 7. Return Data
+Content --> Student : 8. Display Dashboard
+
+@enduml
+
+' ============================================================================
+' 3.3.6.2 SEQUENCE DIAGRAM - FACULTY ADMIN
+' ============================================================================
+@startuml 3.3.6.2_sequence_diagram_professor
+actor "Faculty Admin" as Admin
+participant "App" as App
+participant "ContentArea" as Content
+participant "DynamicPage" as Dynamic
+participant "Database" as DB
+
+Admin -> App : 1. Select Tab
+App -> Content : 2. Navigate
+Content -> Dynamic : 3. Load Page
+Dynamic -> DB : 4. Query Data
+DB --> Dynamic : 5. Return Data
+Dynamic -> Content : 6. Render Table
+Content --> Admin : 7. Display Content
+
+@enduml
+
+' ============================================================================
+' 3.3.6.3 SEQUENCE DIAGRAM - ADVISOR
+' ============================================================================
+@startuml 3.3.6.3_sequence_diagram_advisor
+actor Advisor
+participant "App" as App
+participant "ContentArea" as Content
+participant "Database" as DB
+participant Student
+
+Advisor -> App : 1. View Requests
+App -> Content : 2. Load Page
+Content -> DB : 3. Query Requests
+DB --> Content : 4. Return Data
+Content --> Advisor : 5. Display Requests
+Advisor -> App : 6. Approve/Reject
+App -> DB : 7. Update Status
+DB -> Student : 8. Notify Student
+
+@enduml
+
+' ============================================================================
+' 3.3.6.4 SEQUENCE DIAGRAM - ADMINISTRATOR
+' ============================================================================
+@startuml 3.3.6.4_sequence_diagram_administrator
+actor Administrator
+participant "App" as App
+participant "System" as System
+participant "Database" as DB
+participant "Activity Log" as Log
+
+Administrator -> App : 1. System Update
+App -> System : 2. Process Update
+System -> DB : 3. Update Database
+DB --> System : 4. Confirm Update
+System -> Log : 5. Log Activity
+Log --> System : 6. Logged
+System --> App : 7. Update Success
+App --> Administrator : 8. Confirmation
+
+@enduml
+
+' ============================================================================
+' 3.3.6.5 SEQUENCE DIAGRAM - CONTROLLER
+' ============================================================================
+@startuml 3.3.6.5_sequence_diagram_controller
+participant Controller
+participant "System" as System
+participant "Database" as DB
+participant "Warning Service" as Warning
+participant Student
+
+Controller -> System : 1. Monitor System
+System -> DB : 2. Query Data
+DB --> System : 3. Return Status
+System --> Controller : 4. System Status
+Controller -> System : 5. Generate Warnings
+System -> DB : 6. Check Absences/Grades
+DB --> System : 7. Return Data
+System -> Warning : 8. Create Warning
+Warning -> Student : 9. Send Warning
+
+@enduml
+
+' ============================================================================
+' 3.3.6.6 SEQUENCE DIAGRAM - COMMITTEE GENERATION
+' ============================================================================
+@startuml 3.3.6.6_sequence_diagram_committee_generation
+actor Admin
+participant "Committee\nDefinition" as Committee
+participant "Registration\nService" as Registration
+participant "Room\nService" as Room
+participant "Database" as DB
+
+Admin -> Committee : 1. Request Auto-Generate
+Committee -> Registration : 2. Get Enrollments
+Registration -> DB : 3. Query Enrollments
+DB --> Registration : 4. Return Enrollments
+Registration --> Committee : 5. Enrollment Data
+Committee -> Room : 6. Get Available Rooms
+Room -> DB : 7. Query Rooms
+DB --> Room : 8. Return Rooms
+Room --> Committee : 9. Room Data
+Committee -> DB : 10. Create Committees
+Committee -> DB : 11. Assign Students
+DB --> Committee : 12. Committees Created
+Committee --> Admin : 13. Success Message
+
+@enduml
+
+' ============================================================================
+' 3.3.6 SYSTEM ARCHITECTURE DIAGRAM
+' ============================================================================
+@startuml 3.3.6_system_architecture_diagram
+!define RECTANGLE class
+
+package "Frontend Layer" {
+  RECTANGLE "React + TypeScript" as React
+  RECTANGLE "Tailwind CSS" as Tailwind
+  RECTANGLE "Responsive UI" as UI
+}
+
+package "Data Management Layer" {
+  RECTANGLE "Repository Pattern" as Repo
+  RECTANGLE "Decoupled Data Sources" as Data
+  RECTANGLE "Business Rules + Reports" as Business
+}
+
+package "Data Architecture" {
+  RECTANGLE "TypeScript Interfaces" as Interfaces
+  RECTANGLE "Entities & Relationships" as Entities
+  RECTANGLE "ERD-aligned" as ERD
+}
+
+package "Backend Integration (Planned)" #LightGray {
+  RECTANGLE "REST/GraphQL API" as API
+  RECTANGLE "Auth / Persistence" as Auth
+}
+
+package "Database Integration (Planned)" #LightGray {
+  RECTANGLE "PostgreSQL / MySQL" as DB
+  RECTANGLE "or other DBMS" as DBMS
+}
+
+React --> Repo
+Tailwind --> Data
+UI --> Business
+
+Repo --> Interfaces
+Data --> Entities
+Business --> ERD
+
+Interfaces ..> API : future
+Entities ..> Auth : future
+ERD ..> DB : future
+
+API --> DB
+Auth --> DBMS
+
+@enduml
+
+' ============================================================================
+' END OF PLANTUML DIAGRAMS
+' ============================================================================
