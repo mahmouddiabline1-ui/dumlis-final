@@ -34,8 +34,8 @@ app = FastAPI(
         "schedules, rooms, committees, and registration requests."
     ),
     version="1.0.0",
-    docs_url="/docs" if os.getenv("DEBUG") == "True" else None,
-    redoc_url="/redoc" if os.getenv("DEBUG") == "True" else None,
+    docs_url="/docs" if os.getenv("DEBUG", "").lower() in ("true", "1", "yes") else None,
+    redoc_url="/redoc" if os.getenv("DEBUG", "").lower() in ("true", "1", "yes") else None,
 )
 
 # ── Security Middleware ──────────────────────────────────────────────────────
