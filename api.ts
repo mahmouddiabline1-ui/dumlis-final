@@ -5,8 +5,8 @@
  * All component-level mock-data calls should be replaced with these functions.
  */
 
-// Always use Cloudflare Worker for API to bypass CORS issues
-const BASE_URL = 'https://dumlis-final1.mahmouddiabline1.workers.dev';
+// Use current domain - Cloudflare Pages middleware will proxy to Railway backend
+const BASE_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : 'https://dumlis-final.mahmouddiabline1.workers.dev';
 
 /** مسار الدرجات: لا يستخدم /grades لأن بعض الإضافات تحجب المسار فيظهر Failed to fetch */
 const GRADES_PREFIX = '/student-grades';
