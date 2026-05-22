@@ -21,8 +21,18 @@ export const onRequest = async (context) => {
     backendUrl.protocol = 'https:';
 
     try {
-      const response = await fetch(new Request(backendUrl, request));
-      const newResponse = new Response(response.body, response);
+      const backendRequest = new Request(backendUrl, {
+        method: request.method,
+        headers: request.headers,
+        body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined
+      });
+
+      const response = await fetch(backendRequest);
+      const newResponse = new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers
+      });
 
       // Add CORS headers
       const origin = request.headers.get('origin') || '*';
@@ -33,7 +43,8 @@ export const onRequest = async (context) => {
 
       return newResponse;
     } catch (error) {
-      return new Response(JSON.stringify({ error: 'Backend unavailable' }), {
+      console.error('Worker error:', error);
+      return new Response(JSON.stringify({ error: 'Backend unavailable', message: error.message }), {
         status: 503,
         headers: { 'Content-Type': 'application/json' }
       });
