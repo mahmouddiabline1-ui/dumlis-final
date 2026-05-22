@@ -88,7 +88,9 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # ── Routers ───────────────────────────────────────────────────────
+logger.info("Loading routers...")
 app.include_router(auth.router,                   prefix="/auth",                   tags=["Authentication"])
+logger.info("Auth router loaded")
 app.include_router(faculties.router,              prefix="/faculties",              tags=["Faculties"])
 app.include_router(departments.router,            prefix="/departments",            tags=["Departments"])
 app.include_router(students.router,               prefix="/students",               tags=["Students"])
