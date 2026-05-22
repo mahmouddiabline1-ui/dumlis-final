@@ -5,8 +5,8 @@
  * All component-level mock-data calls should be replaced with these functions.
  */
 
-// Use current domain - Cloudflare Pages middleware will proxy to Railway backend
-const BASE_URL = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : 'https://dumlis-final.mahmouddiabline1.workers.dev';
+// Empty string = same domain. Cloudflare Pages middleware will handle routing to Railway backend
+const BASE_URL = '';
 
 /** مسار الدرجات: لا يستخدم /grades لأن بعض الإضافات تحجب المسار فيظهر Failed to fetch */
 const GRADES_PREFIX = '/student-grades';
