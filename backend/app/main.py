@@ -62,7 +62,7 @@ if os.getenv("APP_ENV") == "production":
 # CORS Middleware (added last so it executes first)
 allowed_origins_str = os.getenv(
     "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3006,http://localhost:5173,https://dumlis-final.railway.app,https://dumlis-final-production.up.railway.app,https://dumlis-final.mahmouddiabline1.workers.dev"
+    "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3006,http://localhost:5173,https://dumlis-final.railway.app,https://dumlis-final-production.up.railway.app,https://dumlis-final.mahmouddiabline1.workers.dev,https://dumlis-final1.mahmouddiabline1.workers.dev"
 )
 ALLOWED_ORIGINS = [origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()]
 logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
