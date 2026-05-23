@@ -272,93 +272,30 @@ export const STUDENT_NAVIGATION: any[] = [
 ];
 
 // ================= FACULTIES =================
+// Matches the production database (FCAI, FSC, FEN)
 export const FACULTIES: Faculty[] = [
   {
     id: 'FCAI',
-    name: 'كلية الحاسبات والذكاء الاصطناعي',
+    name: 'كلية الحاسبات والمعلومات',
     icon: '💻',
-    studentCount: 2000,
+    studentCount: 150,
     staffCount: 120,
     color: 'bg-blue-600'
   },
   {
-    id: 'SCI',
+    id: 'FSC',
     name: 'كلية العلوم',
     icon: '🔬',
-    studentCount: 375,
-    staffCount: 250,
+    studentCount: 100,
+    staffCount: 80,
     color: 'bg-green-600'
   },
   {
-    id: 'COM',
-    name: 'كلية التجارة',
-    icon: '📊',
-    studentCount: 375,
-    staffCount: 300,
-    color: 'bg-yellow-600'
-  },
-  {
-    id: 'EDU',
-    name: 'كلية التربية',
-    icon: '📚',
-    studentCount: 375,
-    staffCount: 200,
-    color: 'bg-red-600'
-  },
-  {
-    id: 'ENG',
+    id: 'FEN',
     name: 'كلية الهندسة',
     icon: '⚙️',
-    studentCount: 375,
-    staffCount: 180,
+    studentCount: 100,
+    staffCount: 110,
     color: 'bg-purple-600'
   },
-  {
-    id: 'MED',
-    name: 'كلية الطب',
-    icon: '🏥',
-    studentCount: 1500,
-    staffCount: 150,
-    color: 'bg-pink-600'
-  },
-  {
-    id: 'PHR',
-    name: 'كلية الصيدلة',
-    icon: '💊',
-    studentCount: 1200,
-    staffCount: 100,
-    color: 'bg-indigo-600'
-  },
-  {
-    id: 'LAW',
-    name: 'كلية الحقوق',
-    icon: '⚖️',
-    studentCount: 3000,
-    staffCount: 120,
-    color: 'bg-gray-600'
-  },
-  {
-    id: 'ART',
-    name: 'كلية الآداب',
-    icon: '📖',
-    studentCount: 4500,
-    staffCount: 180,
-    color: 'bg-orange-600'
-  },
-  {
-    id: 'AGR',
-    name: 'كلية الزراعة',
-    icon: '🌾',
-    studentCount: 2800,
-    staffCount: 140,
-    color: 'bg-lime-600'
-  },
-  {
-    id: 'NRS',
-    name: 'كلية التمريض',
-    icon: '🏥',
-    studentCount: 2000,
-    staffCount: 110,
-    color: 'bg-teal-600'
-  }
 ];
