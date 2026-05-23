@@ -23,6 +23,14 @@ SECRET_KEY = os.getenv("SECRET_KEY", "INSECURE_DEV_KEY_change_in_production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
+# Patch passlib 1.7.4 compatibility with bcrypt >= 4.0
+try:
+    import bcrypt as _bcrypt_mod
+    if not hasattr(_bcrypt_mod, "__about__"):
+        _bcrypt_mod.__about__ = type("about", (), {"__version__": getattr(_bcrypt_mod, "__version__", "4.0.0")})()
+except Exception:
+    pass
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
