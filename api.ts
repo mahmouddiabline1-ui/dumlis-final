@@ -7,7 +7,7 @@
 
 // API Base URL - use environment variable or detect from current domain
 const _env = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined;
-const BASE_URL = (_env?.VITE_API_URL && String(_env.VITE_API_URL).replace(/\/$/, '')) || 'https://dumlis-final.railway.app';
+const BASE_URL = (_env?.VITE_API_URL && String(_env.VITE_API_URL).replace(/\/$/, '')) || 'https://dumlis-final-production.up.railway.app';
 
 /** مسار الدرجات: لا يستخدم /grades لأن بعض الإضافات تحجب المسار فيظهر Failed to fetch */
 const GRADES_PREFIX = '/student-grades';
