@@ -125,10 +125,12 @@ app.include_router(announcements.router,        prefix="/announcements",        
 
 @app.get("/", tags=["Health"])
 def root():
+    logger.info("Root endpoint called - API is responsive")
     return {
         "status": "ok",
         "system": "DUMLIS API v1.0.0",
-        "environment": os.getenv("APP_ENV", "development")
+        "environment": os.getenv("APP_ENV", "development"),
+        "routers_loaded": "yes"
     }
 
 
