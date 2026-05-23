@@ -29,13 +29,12 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def verify_password(plain: str, hashed: str) -> bool:
-    # Verify using bcrypt via passlib context
     plain_truncated = plain[:72] if len(plain) > 72 else plain
     try:
         return pwd_context.verify(plain_truncated, hashed)
-    except Exception:
-        # CRITICAL: Never fall back to plain-text comparison
-        # If bcrypt fails, password is invalid
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"bcrypt verify error: {e}")
         return False
 
 
