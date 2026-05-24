@@ -27,6 +27,9 @@ import {
   staffApi,
   announcementsApi,
   academicCalendarApi,
+  departmentsApi,
+  programsApi,
+  academicRulesApi,
 } from '../api';
 
 interface DynamicPageProps {
@@ -286,6 +289,13 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
         lecturers_staff: (data: any) => staffApi.create(data),
         academic_calendar: (data: any) => academicCalendarApi.create(data),
         announcements_page: (data: any) => announcementsApi.create(data),
+        info_board: (data: any) => announcementsApi.create(data),
+        default: (data: any) => announcementsApi.create(data),
+        fees_collect: (data: any) => financialApi.create(data),
+        payment_perm: (data: any) => financialApi.create(data),
+        manage_departments: (data: any) => departmentsApi.create(data),
+        program_data: (data: any) => programsApi.create(data),
+        program_rules: (data: any) => academicRulesApi.create(data),
       } as Record<string, (data: any) => Promise<any>>,
       update: {
         course_close: (id: any, data: any) => courseClosuresApi.update(id, data),
@@ -317,6 +327,13 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
         lecturers_staff: (id: any, data: any) => staffApi.update(id, data),
         academic_calendar: (id: any, data: any) => academicCalendarApi.update(id, data),
         announcements_page: (id: any, data: any) => announcementsApi.update(id, data),
+        info_board: (id: any, data: any) => announcementsApi.update(id, data),
+        default: (id: any, data: any) => announcementsApi.update(id, data),
+        fees_collect: (id: any, data: any) => financialApi.update(id, data),
+        payment_perm: (id: any, data: any) => financialApi.update(id, data),
+        manage_departments: (id: any, data: any) => departmentsApi.update(id, data),
+        program_data: (id: any, data: any) => programsApi.update(id, data),
+        program_rules: (id: any, data: any) => academicRulesApi.update(id, data),
         // ── pages that update student fields directly ──
         gpa_mod: (id: any, data: any) => studentsApi.update(id, { gpa: parseFloat(data.new_gpa) }),
         level_mod: (id: any, data: any) => studentsApi.update(id, { level: Number(data.new_level_raw) || Number(data.level) }),
