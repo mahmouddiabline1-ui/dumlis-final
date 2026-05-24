@@ -182,16 +182,19 @@ def create_financial_record(
     db.commit()
     db.refresh(record)
 
-    activity = models.ActivityLog(
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="financial_record",
-        entity_id=str(record.id),
-        action="create",
-        description=f"Created financial record for {data.student_id}"
-    )
-    db.add(activity)
-    db.commit()
+    try:
+        activity = models.ActivityLog(
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="financial_record",
+            entity_id=str(record.id),
+            action="create",
+            description=f"Created financial record for {data.student_id}"
+        )
+        db.add(activity)
+        db.commit()
+    except Exception:
+        pass
 
     return record
 
@@ -221,16 +224,19 @@ def update_financial_record(
     db.commit()
     db.refresh(r)
 
-    activity = models.ActivityLog(
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="financial_record",
-        entity_id=str(record_id),
-        action="update",
-        description=f"Updated financial record: paid_amount={r.paid_amount}, status={r.status}"
-    )
-    db.add(activity)
-    db.commit()
+    try:
+        activity = models.ActivityLog(
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="financial_record",
+            entity_id=str(record_id),
+            action="update",
+            description=f"Updated financial record: paid_amount={r.paid_amount}, status={r.status}"
+        )
+        db.add(activity)
+        db.commit()
+    except Exception:
+        pass
 
     return r
 
@@ -251,13 +257,16 @@ def delete_financial_record(
     db.delete(r)
     db.commit()
 
-    activity = models.ActivityLog(
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="financial_record",
-        entity_id=str(record_id),
-        action="delete",
-        description="Deleted financial record"
-    )
-    db.add(activity)
-    db.commit()
+    try:
+        activity = models.ActivityLog(
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="financial_record",
+            entity_id=str(record_id),
+            action="delete",
+            description="Deleted financial record"
+        )
+        db.add(activity)
+        db.commit()
+    except Exception:
+        pass
