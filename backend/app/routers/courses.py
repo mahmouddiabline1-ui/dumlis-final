@@ -113,15 +113,18 @@ def create_course(
     db.commit()
     db.refresh(course)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="course",
-        entity_id=course.id,
-        action="create",
-        description=f"Created course: {course.name}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="course",
+            entity_id=course.id,
+            action="create",
+            description=f"Created course: {course.name}"
+        )
+    except Exception:
+        pass
 
     return course
 
@@ -151,15 +154,18 @@ def update_course(
     db.commit()
     db.refresh(course)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="course",
-        entity_id=course_id,
-        action="update",
-        description=f"Updated course: {list(update_data.keys())}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="course",
+            entity_id=course_id,
+            action="update",
+            description=f"Updated course: {list(update_data.keys())}"
+        )
+    except Exception:
+        pass
 
     return course
 
@@ -180,15 +186,18 @@ def delete_course(
     db.delete(course)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="course",
-        entity_id=course_id,
-        action="delete",
-        description=f"Deleted course: {course.name}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="course",
+            entity_id=course_id,
+            action="delete",
+            description=f"Deleted course: {course.name}"
+        )
+    except Exception:
+        pass
 
 # ── Prerequisites ──────────────────────────────────────────────────
 @router.get("/{course_id}/prerequisites")
@@ -212,15 +221,18 @@ def add_prerequisite(
     db.add(prereq)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="course_prerequisite",
-        entity_id=f"{course_id}-{data.prerequisite_id}",
-        action="create",
-        description=f"Added prerequisite {data.prerequisite_id} to course {course_id}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="course_prerequisite",
+            entity_id=f"{course_id}-{data.prerequisite_id}",
+            action="create",
+            description=f"Added prerequisite {data.prerequisite_id} to course {course_id}"
+        )
+    except Exception:
+        pass
 
     return prereq
 
@@ -241,12 +253,15 @@ def remove_prerequisite(
     db.delete(prereq)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="course_prerequisite",
-        entity_id=f"{course_id}-{prereq_id}",
-        action="delete",
-        description=f"Removed prerequisite {prereq_id} from course {course_id}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="course_prerequisite",
+            entity_id=f"{course_id}-{prereq_id}",
+            action="delete",
+            description=f"Removed prerequisite {prereq_id} from course {course_id}"
+        )
+    except Exception:
+        pass

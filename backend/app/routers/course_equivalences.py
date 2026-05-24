@@ -87,15 +87,18 @@ def create_course_equivalence(
     db.commit()
     db.refresh(equivalence)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="course_equivalence",
-        entity_id=str(equivalence.id),
-        action="create",
-        description=f"Created course equivalence for student {data.student_id}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="course_equivalence",
+            entity_id=str(equivalence.id),
+            action="create",
+            description=f"Created course equivalence for student {data.student_id}"
+        )
+    except Exception:
+        pass
 
     return equivalence
 
@@ -127,15 +130,18 @@ def update_course_equivalence(
     db.commit()
     db.refresh(equivalence)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="course_equivalence",
-        entity_id=str(equivalence_id),
-        action="update",
-        description="Updated course equivalence"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="course_equivalence",
+            entity_id=str(equivalence_id),
+            action="update",
+            description="Updated course equivalence"
+        )
+    except Exception:
+        pass
 
     return equivalence
 
@@ -163,12 +169,15 @@ def delete_course_equivalence(
     db.delete(equivalence)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="course_equivalence",
-        entity_id=str(equivalence_id),
-        action="delete",
-        description="Deleted course equivalence"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="course_equivalence",
+            entity_id=str(equivalence_id),
+            action="delete",
+            description="Deleted course equivalence"
+        )
+    except Exception:
+        pass

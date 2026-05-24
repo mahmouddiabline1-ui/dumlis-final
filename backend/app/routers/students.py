@@ -182,7 +182,7 @@ def get_student(
         raise HTTPException(status_code=404, detail="Student not found or access denied")
     return student
 
-@router.post("/")
+@router.post("/", response_model=schemas.StudentResponse, status_code=status.HTTP_201_CREATED)
 def create_student(
     data: schemas.StudentCreate,
     db: Session = Depends(get_db),
@@ -200,15 +200,18 @@ def create_student(
     db.commit()
     db.refresh(student)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="student",
-        entity_id=student.student_id,
-        action="create",
-        description=f"Created student: {student.name} ({student.student_id})"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="student",
+            entity_id=student.student_id,
+            action="create",
+            description=f"Created student: {student.name} ({student.student_id})"
+        )
+    except Exception:
+        pass
 
     return student
 

@@ -69,15 +69,18 @@ def create_report_signature(
     db.commit()
     db.refresh(new_signature)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="report_signature",
-        entity_id=str(new_signature.id),
-        action="create",
-        description=f"Created report signature: {signature.signatory_name}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="report_signature",
+            entity_id=str(new_signature.id),
+            action="create",
+            description=f"Created report signature: {signature.signatory_name}"
+        )
+    except Exception:
+        pass
 
     return new_signature
 
@@ -105,15 +108,18 @@ def update_report_signature(
     db.commit()
     db.refresh(db_signature)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="report_signature",
-        entity_id=str(id),
-        action="update",
-        description="Updated report signature"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="report_signature",
+            entity_id=str(id),
+            action="update",
+            description="Updated report signature"
+        )
+    except Exception:
+        pass
 
     return db_signature
 
@@ -136,14 +142,17 @@ def delete_report_signature(
     db.delete(db_signature)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="report_signature",
-        entity_id=str(id),
-        action="delete",
-        description="Deleted report signature"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="report_signature",
+            entity_id=str(id),
+            action="delete",
+            description="Deleted report signature"
+        )
+    except Exception:
+        pass
 
     return None

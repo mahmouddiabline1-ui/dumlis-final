@@ -36,15 +36,18 @@ def create_setting(
     db.commit()
     db.refresh(db_setting)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="system_setting",
-        entity_id=str(db_setting.id),
-        action="create",
-        description=f"Created system setting: {data.key}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="system_setting",
+            entity_id=str(db_setting.id),
+            action="create",
+            description=f"Created system setting: {data.key}"
+        )
+    except Exception:
+        pass
 
     return db_setting
 
@@ -73,14 +76,17 @@ def update_setting(
     db.commit()
     db.refresh(setting)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="system_setting",
-        entity_id=str(setting_id),
-        action="update",
-        description="Updated system setting"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="system_setting",
+            entity_id=str(setting_id),
+            action="update",
+            description="Updated system setting"
+        )
+    except Exception:
+        pass
 
     return setting

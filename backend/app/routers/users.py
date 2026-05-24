@@ -66,15 +66,18 @@ def create_user(
     db.commit()
     db.refresh(db_user)
 
-    log_activity(
-        db=db,
-        user_id=current_user.id,
-        faculty_id=None,
-        entity_type="user",
-        entity_id=str(db_user.id),
-        action="create",
-        description=f"Created user: {user_in.username}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=current_user.id,
+            faculty_id=None,
+            entity_type="user",
+            entity_id=str(db_user.id),
+            action="create",
+            description=f"Created user: {user_in.username}"
+        )
+    except Exception:
+        pass
 
     return db_user
 
@@ -100,15 +103,18 @@ def update_user(
     db.commit()
     db.refresh(db_user)
 
-    log_activity(
-        db=db,
-        user_id=current_user.id,
-        faculty_id=None,
-        entity_type="user",
-        entity_id=str(user_id),
-        action="update",
-        description="Updated user"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=current_user.id,
+            faculty_id=None,
+            entity_type="user",
+            entity_id=str(user_id),
+            action="update",
+            description="Updated user"
+        )
+    except Exception:
+        pass
 
     return db_user
 
@@ -128,14 +134,17 @@ def delete_user(
     db.delete(db_user)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=current_user.id,
-        faculty_id=None,
-        entity_type="user",
-        entity_id=str(user_id),
-        action="delete",
-        description="Deleted user"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=current_user.id,
+            faculty_id=None,
+            entity_type="user",
+            entity_id=str(user_id),
+            action="delete",
+            description="Deleted user"
+        )
+    except Exception:
+        pass
 
     return None

@@ -20,7 +20,7 @@ def list_requirements(
         q = q.filter(models.StudentRequirement.student_id == student_id)
     return q.all()
 
-@router.post("/")
+@router.post("/", response_model=schemas.StudentRequirementResponse, status_code=status.HTTP_201_CREATED)
 def create_requirement(
     data: schemas.StudentRequirementCreate,
     db: Session = Depends(get_db),
@@ -44,15 +44,18 @@ def create_requirement(
         db.commit()
         db.refresh(existing)
 
-        log_activity(
-            db=db,
-            user_id=current_user.id,
-            faculty_id=scoped_faculty_id,
-            entity_type="student_requirement",
-            entity_id=str(existing.id),
-            action="update",
-            description=f"Updated student requirement for {data.student_id}"
-        )
+        try:
+            log_activity(
+                db=db,
+                user_id=current_user.id,
+                faculty_id=scoped_faculty_id,
+                entity_type="student_requirement",
+                entity_id=str(existing.id),
+                action="update",
+                description=f"Updated student requirement for {data.student_id}"
+            )
+        except Exception:
+            pass
 
         return existing
 
@@ -61,19 +64,22 @@ def create_requirement(
     db.commit()
     db.refresh(requirement)
 
-    log_activity(
-        db=db,
-        user_id=current_user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="student_requirement",
-        entity_id=str(requirement.id),
-        action="create",
-        description=f"Created student requirement for {data.student_id}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=current_user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="student_requirement",
+            entity_id=str(requirement.id),
+            action="create",
+            description=f"Created student requirement for {data.student_id}"
+        )
+    except Exception:
+        pass
 
     return requirement
 
-@router.put("/{req_id}")
+@router.put("/{req_id}", response_model=schemas.StudentRequirementResponse)
 def update_requirement(
     req_id: int,
     data: schemas.StudentRequirementUpdate,
@@ -91,19 +97,22 @@ def update_requirement(
     db.commit()
     db.refresh(requirement)
 
-    log_activity(
-        db=db,
-        user_id=current_user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="student_requirement",
-        entity_id=str(req_id),
-        action="update",
-        description="Updated student requirement"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=current_user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="student_requirement",
+            entity_id=str(req_id),
+            action="update",
+            description="Updated student requirement"
+        )
+    except Exception:
+        pass
 
     return requirement
 
-@router.post("/bulk")
+@router.post("/bulk", response_model=List[schemas.StudentRequirementResponse])
 def bulk_create_requirements(
     data: List[schemas.StudentRequirementCreate],
     db: Session = Depends(get_db),
@@ -129,14 +138,17 @@ def bulk_create_requirements(
     for res in results:
         db.refresh(res)
 
-    log_activity(
-        db=db,
-        user_id=current_user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="student_requirement",
-        entity_id=None,
-        action="bulk_create",
-        description=f"Bulk created {len(results)} student requirements"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=current_user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="student_requirement",
+            entity_id=None,
+            action="bulk_create",
+            description=f"Bulk created {len(results)} student requirements"
+        )
+    except Exception:
+        pass
 
     return results

@@ -108,15 +108,18 @@ def create_grade(
     db.commit()
     db.refresh(grade)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="grade",
-        entity_id=str(grade.id),
-        action="create",
-        description=f"Created grade for {data.student_id}: {data.course_id} - {data.total}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="grade",
+            entity_id=str(grade.id),
+            action="create",
+            description=f"Created grade for {data.student_id}: {data.course_id} - {data.total}"
+        )
+    except Exception:
+        pass
 
     return grade
 
@@ -147,15 +150,18 @@ def update_grade(
     db.commit()
     db.refresh(g)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="grade",
-        entity_id=str(grade_id),
-        action="update",
-        description=f"Updated grade: {list(update_data.keys())}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="grade",
+            entity_id=str(grade_id),
+            action="update",
+            description=f"Updated grade: {list(update_data.keys())}"
+        )
+    except Exception:
+        pass
 
     return g
 
@@ -176,12 +182,15 @@ def delete_grade(
     db.delete(g)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="grade",
-        entity_id=str(grade_id),
-        action="delete",
-        description="Deleted grade record"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="grade",
+            entity_id=str(grade_id),
+            action="delete",
+            description="Deleted grade record"
+        )
+    except Exception:
+        pass

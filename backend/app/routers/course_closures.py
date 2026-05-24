@@ -86,15 +86,18 @@ def create_course_close(
     db.commit()
     db.refresh(db_closure)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="course_closure",
-        entity_id=str(db_closure.id),
-        action="create",
-        description=f"Created course closure for {closure.course_code}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="course_closure",
+            entity_id=str(db_closure.id),
+            action="create",
+            description=f"Created course closure for {closure.course_code}"
+        )
+    except Exception:
+        pass
 
     db_closure.course_name = course.name
     return db_closure
@@ -122,15 +125,18 @@ def update_course_close(
 
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="course_closure",
-        entity_id=str(closure_id),
-        action="update",
-        description="Updated course closure"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="course_closure",
+            entity_id=str(closure_id),
+            action="update",
+            description="Updated course closure"
+        )
+    except Exception:
+        pass
 
     db_closure.course_name = db_closure.course.name if db_closure.course else "غير محدد"
     return db_closure
@@ -154,14 +160,17 @@ def delete_course_close(
     db.delete(db_closure)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="course_closure",
-        entity_id=str(closure_id),
-        action="delete",
-        description="Deleted course closure"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="course_closure",
+            entity_id=str(closure_id),
+            action="delete",
+            description="Deleted course closure"
+        )
+    except Exception:
+        pass
 
     return {"message": "Successfully deleted"}

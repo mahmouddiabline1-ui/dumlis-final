@@ -72,15 +72,18 @@ def create_program(
     db.commit()
     db.refresh(program)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="academic_program",
-        entity_id=str(program.id),
-        action="create",
-        description=f"Created academic program: {data.name}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="academic_program",
+            entity_id=str(program.id),
+            action="create",
+            description=f"Created academic program: {data.name}"
+        )
+    except Exception:
+        pass
 
     return program
 
@@ -106,15 +109,18 @@ def update_program(
     db.commit()
     db.refresh(program)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="academic_program",
-        entity_id=str(program_id),
-        action="update",
-        description="Updated academic program"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="academic_program",
+            entity_id=str(program_id),
+            action="update",
+            description="Updated academic program"
+        )
+    except Exception:
+        pass
 
     return program
 
@@ -136,12 +142,15 @@ def delete_program(
     db.delete(program)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="academic_program",
-        entity_id=str(program_id),
-        action="delete",
-        description="Deleted academic program"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="academic_program",
+            entity_id=str(program_id),
+            action="delete",
+            description="Deleted academic program"
+        )
+    except Exception:
+        pass

@@ -51,15 +51,18 @@ def create_staff(
     db.commit()
     db.refresh(staff)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="staff",
-        entity_id=staff.id,
-        action="create",
-        description=f"Created staff member {staff.id}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="staff",
+            entity_id=staff.id,
+            action="create",
+            description=f"Created staff member {staff.id}"
+        )
+    except Exception:
+        pass
 
     return staff
 
@@ -81,15 +84,18 @@ def update_staff(
     db.commit()
     db.refresh(staff)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="staff",
-        entity_id=staff_id,
-        action="update",
-        description=f"Updated staff member {staff_id}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="staff",
+            entity_id=staff_id,
+            action="update",
+            description=f"Updated staff member {staff_id}"
+        )
+    except Exception:
+        pass
 
     return staff
 
@@ -107,12 +113,15 @@ def delete_staff(
     db.delete(staff)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="staff",
-        entity_id=staff_id,
-        action="delete",
-        description=f"Deleted staff member {staff_id}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="staff",
+            entity_id=staff_id,
+            action="delete",
+            description=f"Deleted staff member {staff_id}"
+        )
+    except Exception:
+        pass

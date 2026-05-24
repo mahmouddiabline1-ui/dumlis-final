@@ -55,15 +55,18 @@ def create_event(
     db.commit()
     db.refresh(event)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="academic_event",
-        entity_id=event.id,
-        action="create",
-        description=f"Created {data.event_type} event for {data.academic_year}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="academic_event",
+            entity_id=event.id,
+            action="create",
+            description=f"Created {data.event_type} event for {data.academic_year}"
+        )
+    except Exception:
+        pass
 
     return event
 
@@ -84,15 +87,18 @@ def update_event(
     db.commit()
     db.refresh(event)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="academic_event",
-        entity_id=event_id,
-        action="update",
-        description=f"Updated {event.event_type} event"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="academic_event",
+            entity_id=event_id,
+            action="update",
+            description=f"Updated {event.event_type} event"
+        )
+    except Exception:
+        pass
 
     return event
 
@@ -110,12 +116,15 @@ def delete_event(
     db.delete(event)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="academic_event",
-        entity_id=event_id,
-        action="delete",
-        description=f"Deleted {event.event_type} event"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="academic_event",
+            entity_id=event_id,
+            action="delete",
+            description=f"Deleted {event.event_type} event"
+        )
+    except Exception:
+        pass

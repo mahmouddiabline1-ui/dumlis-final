@@ -37,15 +37,18 @@ def create_document(
     db.commit()
     db.refresh(document)
 
-    log_activity(
-        db=db,
-        user_id=current_user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="student_document",
-        entity_id=str(document.id),
-        action="create",
-        description=f"Created student document for {data.student_id}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=current_user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="student_document",
+            entity_id=str(document.id),
+            action="create",
+            description=f"Created student document for {data.student_id}"
+        )
+    except Exception:
+        pass
 
     return document
 
@@ -62,12 +65,15 @@ def delete_document(
     db.delete(doc)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=current_user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="student_document",
-        entity_id=str(doc_id),
-        action="delete",
-        description="Deleted student document"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=current_user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="student_document",
+            entity_id=str(doc_id),
+            action="delete",
+            description="Deleted student document"
+        )
+    except Exception:
+        pass

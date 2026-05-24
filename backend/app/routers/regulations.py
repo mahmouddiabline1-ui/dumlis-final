@@ -88,15 +88,18 @@ def create_regulation(
     db.commit()
     db.refresh(regulation)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="study_regulation",
-        entity_id=str(regulation.id),
-        action="create",
-        description=f"Created study regulation: {data.name}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="study_regulation",
+            entity_id=str(regulation.id),
+            action="create",
+            description=f"Created study regulation: {data.name}"
+        )
+    except Exception:
+        pass
 
     return regulation
 
@@ -122,15 +125,18 @@ def update_regulation(
     db.commit()
     db.refresh(regulation)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="study_regulation",
-        entity_id=str(regulation_id),
-        action="update",
-        description="Updated study regulation"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="study_regulation",
+            entity_id=str(regulation_id),
+            action="update",
+            description="Updated study regulation"
+        )
+    except Exception:
+        pass
 
     return regulation
 
@@ -152,12 +158,15 @@ def delete_regulation(
     db.delete(regulation)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="study_regulation",
-        entity_id=str(regulation_id),
-        action="delete",
-        description="Deleted study regulation"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="study_regulation",
+            entity_id=str(regulation_id),
+            action="delete",
+            description="Deleted study regulation"
+        )
+    except Exception:
+        pass

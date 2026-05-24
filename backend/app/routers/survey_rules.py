@@ -4,7 +4,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from app.database import get_db
-from app import models
+from app import models, schemas
 from app.routers.auth import get_scoped_faculty_id, get_current_user
 from app.activity_helper import log_activity
 
@@ -69,74 +69,50 @@ def get_survey_rule(
     }
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=schemas.SurveyRuleResponse, status_code=status.HTTP_201_CREATED)
 def create_survey_rule(
-    code: str,
-    name: str,
-    target: Optional[str] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    status: str = 'نشط',
+    data: schemas.SurveyRuleCreate,
     db: Session = Depends(get_db),
     scoped_faculty_id: Optional[str] = Depends(get_scoped_faculty_id),
     user: models.User = Depends(get_current_user),
 ):
     """Create a new survey rule."""
-    # Check if code already exists
-    if db.query(models.SurveyRule).filter(models.SurveyRule.code == code).first():
+    if db.query(models.SurveyRule).filter(models.SurveyRule.code == data.code).first():
         raise HTTPException(status_code=409, detail="Survey Rule with this code already exists")
 
-    # Parse dates
-    start = None
-    end = None
-    if start_date:
-        start = datetime.fromisoformat(start_date)
-    if end_date:
-        end = datetime.fromisoformat(end_date)
-
     rule = models.SurveyRule(
-        code=code,
-        name=name,
-        target=target,
-        start_date=start,
-        end_date=end,
-        status=status,
+        code=data.code,
+        name=data.name,
+        target=data.target,
+        start_date=data.start_date,
+        end_date=data.end_date,
+        status=data.status,
         faculty_id=scoped_faculty_id,
     )
     db.add(rule)
     db.commit()
     db.refresh(rule)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="survey_rule",
-        entity_id=str(rule.id),
-        action="create",
-        description=f"Created survey rule: {name}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="survey_rule",
+            entity_id=str(rule.id),
+            action="create",
+            description=f"Created survey rule: {data.name}"
+        )
+    except Exception:
+        pass
 
-    return {
-        'id': str(rule.id),
-        'code': rule.code,
-        'name': rule.name,
-        'target': rule.target,
-        'start_date': rule.start_date.isoformat() if rule.start_date else None,
-        'end_date': rule.end_date.isoformat() if rule.end_date else None,
-        'status': rule.status,
-        'faculty_id': rule.faculty_id,
-    }
+    return rule
 
 
-@router.put("/{rule_id}", status_code=status.HTTP_200_OK)
+@router.put("/{rule_id}", response_model=schemas.SurveyRuleResponse)
 def update_survey_rule(
     rule_id: str,
-    name: Optional[str] = None,
-    target: Optional[str] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    status: Optional[str] = None,
+    data: schemas.SurveyRuleUpdate,
     db: Session = Depends(get_db),
     scoped_faculty_id: Optional[str] = Depends(get_scoped_faculty_id),
     user: models.User = Depends(get_current_user),
@@ -150,40 +126,26 @@ def update_survey_rule(
     if not rule:
         raise HTTPException(status_code=404, detail="Survey Rule not found or access denied")
 
-    if name:
-        rule.name = name
-    if target is not None:
-        rule.target = target
-    if start_date:
-        rule.start_date = datetime.fromisoformat(start_date)
-    if end_date:
-        rule.end_date = datetime.fromisoformat(end_date)
-    if status:
-        rule.status = status
+    for k, v in data.model_dump(exclude_none=True).items():
+        setattr(rule, k, v)
 
     db.commit()
     db.refresh(rule)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="survey_rule",
-        entity_id=str(rule_id),
-        action="update",
-        description="Updated survey rule"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="survey_rule",
+            entity_id=str(rule_id),
+            action="update",
+            description="Updated survey rule"
+        )
+    except Exception:
+        pass
 
-    return {
-        'id': str(rule.id),
-        'code': rule.code,
-        'name': rule.name,
-        'target': rule.target,
-        'start_date': rule.start_date.isoformat() if rule.start_date else None,
-        'end_date': rule.end_date.isoformat() if rule.end_date else None,
-        'status': rule.status,
-        'faculty_id': rule.faculty_id,
-    }
+    return rule
 
 
 @router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -205,12 +167,15 @@ def delete_survey_rule(
     db.delete(rule)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="survey_rule",
-        entity_id=str(rule_id),
-        action="delete",
-        description="Deleted survey rule"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="survey_rule",
+            entity_id=str(rule_id),
+            action="delete",
+            description="Deleted survey rule"
+        )
+    except Exception:
+        pass

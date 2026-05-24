@@ -104,15 +104,18 @@ def create_committee(
     db.commit()
     db.refresh(committee)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="committee",
-        entity_id=str(committee.id),
-        action="create",
-        description=f"Created committee: {data.name}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="committee",
+            entity_id=str(committee.id),
+            action="create",
+            description=f"Created committee: {data.name}"
+        )
+    except Exception:
+        pass
 
     return committee
 
@@ -136,15 +139,18 @@ def update_committee(
     db.commit()
     db.refresh(c)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="committee",
-        entity_id=str(committee_id),
-        action="update",
-        description="Updated committee"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="committee",
+            entity_id=str(committee_id),
+            action="update",
+            description="Updated committee"
+        )
+    except Exception:
+        pass
 
     return c
 
@@ -165,15 +171,18 @@ def delete_committee(
     db.delete(c)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="committee",
-        entity_id=str(committee_id),
-        action="delete",
-        description="Deleted committee"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="committee",
+            entity_id=str(committee_id),
+            action="delete",
+            description="Deleted committee"
+        )
+    except Exception:
+        pass
 
 
 # ── Student assignments ────────────────────────────────────────────
@@ -239,15 +248,18 @@ def assign_student_to_committee(
     db.commit()
     db.refresh(assignment)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="student_assignment",
-        entity_id=str(assignment.id),
-        action="create",
-        description=f"Assigned student {data.student_id} to committee {committee_id}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="student_assignment",
+            entity_id=str(assignment.id),
+            action="create",
+            description=f"Assigned student {data.student_id} to committee {committee_id}"
+        )
+    except Exception:
+        pass
 
     return assignment
 
@@ -279,12 +291,15 @@ def remove_student_from_committee(
         committee.assigned_students -= 1
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="student_assignment",
-        entity_id=str(a.id),
-        action="delete",
-        description=f"Removed student {student_id} from committee {committee_id}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="student_assignment",
+            entity_id=str(a.id),
+            action="delete",
+            description=f"Removed student {student_id} from committee {committee_id}"
+        )
+    except Exception:
+        pass

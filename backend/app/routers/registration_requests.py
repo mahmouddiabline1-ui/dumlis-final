@@ -47,7 +47,7 @@ def list_blocks(
     return q.all()
 
 
-@router.post("/blocks/")
+@router.post("/blocks/", response_model=schemas.StudentBlockResponse, status_code=status.HTTP_201_CREATED)
 def create_block(
     data: schemas.StudentBlockCreate,
     db: Session = Depends(get_db),
@@ -76,20 +76,23 @@ def create_block(
     db.commit()
     db.refresh(block)
 
-    log_activity(
-        db=db,
-        user_id=current_user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="student_block",
-        entity_id=str(block.id),
-        action="create",
-        description=f"Created student block for {data.student_id}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=current_user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="student_block",
+            entity_id=str(block.id),
+            action="create",
+            description=f"Created student block for {data.student_id}"
+        )
+    except Exception:
+        pass
 
     return block
 
 
-@router.put("/blocks/{block_id}")
+@router.put("/blocks/{block_id}", response_model=schemas.StudentBlockResponse)
 def update_block(
     block_id: int,
     data: schemas.StudentBlockUpdate,
@@ -109,15 +112,18 @@ def update_block(
     db.commit()
     db.refresh(b)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="student_block",
-        entity_id=str(block_id),
-        action="update",
-        description="Updated student block"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="student_block",
+            entity_id=str(block_id),
+            action="update",
+            description="Updated student block"
+        )
+    except Exception:
+        pass
 
     return b
 
@@ -137,7 +143,7 @@ def get_request(
     return r
 
 
-@router.post("/")
+@router.post("/", response_model=schemas.RegistrationRequestResponse, status_code=status.HTTP_201_CREATED)
 def create_request(
     data: schemas.RegistrationRequestCreate,
     db: Session = Depends(get_db),
@@ -168,20 +174,23 @@ def create_request(
     db.commit()
     db.refresh(req)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="registration_request",
-        entity_id=str(req.id),
-        action="create",
-        description=f"Created registration request for student {data.student_id}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="registration_request",
+            entity_id=str(req.id),
+            action="create",
+            description=f"Created registration request for student {data.student_id}"
+        )
+    except Exception:
+        pass
 
     return req
 
 
-@router.put("/{request_id}")
+@router.put("/{request_id}", response_model=schemas.RegistrationRequestResponse)
 def update_request(
     request_id: str,
     data: schemas.RegistrationRequestUpdate,
@@ -204,15 +213,18 @@ def update_request(
     db.commit()
     db.refresh(r)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="registration_request",
-        entity_id=str(request_id),
-        action="update",
-        description="Updated registration request"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="registration_request",
+            entity_id=str(request_id),
+            action="update",
+            description="Updated registration request"
+        )
+    except Exception:
+        pass
 
     return r
 
@@ -233,12 +245,15 @@ def delete_request(
     db.delete(r)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="registration_request",
-        entity_id=str(request_id),
-        action="delete",
-        description="Deleted registration request"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="registration_request",
+            entity_id=str(request_id),
+            action="delete",
+            description="Deleted registration request"
+        )
+    except Exception:
+        pass

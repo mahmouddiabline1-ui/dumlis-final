@@ -46,7 +46,7 @@ def get_faculty(faculty_id: str, db: Session = Depends(get_db)):
     return faculty
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=schemas.FacultyResponse, status_code=status.HTTP_201_CREATED)
 def create_faculty(
     data: schemas.FacultyCreate,
     db: Session = Depends(get_db),
@@ -76,20 +76,23 @@ def create_faculty(
     db.commit()
     db.refresh(faculty)
 
-    log_activity(
-        db=db,
-        user_id=current_user.id,
-        faculty_id=None,
-        entity_type="faculty",
-        entity_id=str(faculty.id),
-        action="create",
-        description=f"Created faculty: {data.name}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=current_user.id,
+            faculty_id=None,
+            entity_type="faculty",
+            entity_id=str(faculty.id),
+            action="create",
+            description=f"Created faculty: {data.name}"
+        )
+    except Exception:
+        pass
 
     return faculty
 
 
-@router.put("/{faculty_id}")
+@router.put("/{faculty_id}", response_model=schemas.FacultyResponse)
 def update_faculty(
     faculty_id: str,
     data: schemas.FacultyUpdate,
@@ -106,15 +109,18 @@ def update_faculty(
     db.commit()
     db.refresh(faculty)
 
-    log_activity(
-        db=db,
-        user_id=current_user.id,
-        faculty_id=None,
-        entity_type="faculty",
-        entity_id=str(faculty_id),
-        action="update",
-        description="Updated faculty"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=current_user.id,
+            faculty_id=None,
+            entity_type="faculty",
+            entity_id=str(faculty_id),
+            action="update",
+            description="Updated faculty"
+        )
+    except Exception:
+        pass
 
     return faculty
 
@@ -133,12 +139,15 @@ def delete_faculty(
     db.delete(faculty)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=current_user.id,
-        faculty_id=None,
-        entity_type="faculty",
-        entity_id=str(faculty_id),
-        action="delete",
-        description="Deleted faculty"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=current_user.id,
+            faculty_id=None,
+            entity_type="faculty",
+            entity_id=str(faculty_id),
+            action="delete",
+            description="Deleted faculty"
+        )
+    except Exception:
+        pass

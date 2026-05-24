@@ -124,15 +124,18 @@ def auto_generate_schedules(
         for schedule in generated_list:
             db.refresh(schedule)
 
-        log_activity(
-            db=db,
-            user_id=user.id,
-            faculty_id=scoped_faculty_id,
-            entity_type="course_schedule",
-            entity_id=None,
-            action="bulk_create",
-            description=f"Auto-generated {len(generated_list)} course schedules"
-        )
+        try:
+            log_activity(
+                db=db,
+                user_id=user.id,
+                faculty_id=scoped_faculty_id,
+                entity_type="course_schedule",
+                entity_id=None,
+                action="bulk_create",
+                description=f"Auto-generated {len(generated_list)} course schedules"
+            )
+        except Exception:
+            pass
 
     return {"generated": len(generated_list), "preview": generated_list, "dry_run": dry_run}
 
@@ -318,15 +321,18 @@ def create_schedule(
     db.commit()
     db.refresh(schedule)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="course_schedule",
-        entity_id=str(schedule.id),
-        action="create",
-        description=f"Created course schedule for {data.course_id}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="course_schedule",
+            entity_id=str(schedule.id),
+            action="create",
+            description=f"Created course schedule for {data.course_id}"
+        )
+    except Exception:
+        pass
 
     return schedule
 
@@ -356,15 +362,18 @@ def update_schedule(
     db.commit()
     db.refresh(s)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="course_schedule",
-        entity_id=str(schedule_id),
-        action="update",
-        description="Updated course schedule"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="course_schedule",
+            entity_id=str(schedule_id),
+            action="update",
+            description="Updated course schedule"
+        )
+    except Exception:
+        pass
 
     return s
 
@@ -385,15 +394,18 @@ def delete_schedule(
     db.delete(s)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="course_schedule",
-        entity_id=str(schedule_id),
-        action="delete",
-        description="Deleted course schedule"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="course_schedule",
+            entity_id=str(schedule_id),
+            action="delete",
+            description="Deleted course schedule"
+        )
+    except Exception:
+        pass
 
 @router.post("/check-conflict", response_model=schemas.ConflictCheckResponse)
 def check_schedule_conflict(
@@ -463,15 +475,18 @@ def bulk_create_schedules(
     for schedule in schedules:
         db.refresh(schedule)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="course_schedule",
-        entity_id=None,
-        action="bulk_create",
-        description=f"Bulk created {len(schedules)} course schedules"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="course_schedule",
+            entity_id=None,
+            action="bulk_create",
+            description=f"Bulk created {len(schedules)} course schedules"
+        )
+    except Exception:
+        pass
 
     return schemas.BulkScheduleCreateResponse(
         created=len(schedules),

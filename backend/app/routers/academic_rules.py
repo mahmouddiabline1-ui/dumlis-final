@@ -86,15 +86,18 @@ def create_academic_rule(
         db.commit()
         db.refresh(existing_rule)
 
-        log_activity(
-            db=db,
-            user_id=user.id,
-            faculty_id=scoped_faculty_id,
-            entity_type="academic_rule",
-            entity_id=str(existing_rule.id),
-            action="update",
-            description="Updated academic rule"
-        )
+        try:
+            log_activity(
+                db=db,
+                user_id=user.id,
+                faculty_id=scoped_faculty_id,
+                entity_type="academic_rule",
+                entity_id=str(existing_rule.id),
+                action="update",
+                description="Updated academic rule"
+            )
+        except Exception:
+            pass
 
         return existing_rule
 
@@ -113,15 +116,18 @@ def create_academic_rule(
         db.commit()
         db.refresh(existing_by_faculty)
 
-        log_activity(
-            db=db,
-            user_id=user.id,
-            faculty_id=scoped_faculty_id,
-            entity_type="academic_rule",
-            entity_id=str(existing_by_faculty.id),
-            action="update",
-            description="Updated academic rule"
-        )
+        try:
+            log_activity(
+                db=db,
+                user_id=user.id,
+                faculty_id=scoped_faculty_id,
+                entity_type="academic_rule",
+                entity_id=str(existing_by_faculty.id),
+                action="update",
+                description="Updated academic rule"
+            )
+        except Exception:
+            pass
 
         return existing_by_faculty
 
@@ -131,15 +137,18 @@ def create_academic_rule(
     db.commit()
     db.refresh(rule)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="academic_rule",
-        entity_id=str(rule.id),
-        action="create",
-        description="Created academic rule"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="academic_rule",
+            entity_id=str(rule.id),
+            action="create",
+            description="Created academic rule"
+        )
+    except Exception:
+        pass
 
     return rule
 
@@ -164,15 +173,18 @@ def update_academic_rule(
     db.commit()
     db.refresh(rule)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="academic_rule",
-        entity_id=str(rule_id),
-        action="update",
-        description="Updated academic rule"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="academic_rule",
+            entity_id=str(rule_id),
+            action="update",
+            description="Updated academic rule"
+        )
+    except Exception:
+        pass
 
     return rule
 
@@ -194,12 +206,15 @@ def delete_academic_rule(
     db.delete(rule)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="academic_rule",
-        entity_id=str(rule_id),
-        action="delete",
-        description="Deleted academic rule"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="academic_rule",
+            entity_id=str(rule_id),
+            action="delete",
+            description="Deleted academic rule"
+        )
+    except Exception:
+        pass

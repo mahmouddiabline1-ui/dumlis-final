@@ -969,4 +969,46 @@ class AnnouncementResponse(AnnouncementBase, OrmBase):
     id              : uuid.UUID
     is_active       : bool
     created_at      : datetime
+
+
+# ============================================================
+# SurveyRule
+# ============================================================
+
+class SurveyRuleCreate(BaseModel):
+    code       : str
+    name       : str
+    target     : Optional[str]  = None
+    start_date : Optional[date] = None
+    end_date   : Optional[date] = None
+    status     : str            = 'نشط'
+
+    @field_validator('start_date', 'end_date', mode='before')
+    @classmethod
+    def empty_to_none(cls, v):
+        return None if v == '' else v
+
+class SurveyRuleUpdate(BaseModel):
+    name       : Optional[str]  = None
+    target     : Optional[str]  = None
+    start_date : Optional[date] = None
+    end_date   : Optional[date] = None
+    status     : Optional[str]  = None
+
+    @field_validator('start_date', 'end_date', mode='before')
+    @classmethod
+    def empty_to_none(cls, v):
+        return None if v == '' else v
+
+class SurveyRuleResponse(OrmBase):
+    id         : str
+    code       : str
+    name       : str
+    target     : Optional[str]  = None
+    start_date : Optional[date] = None
+    end_date   : Optional[date] = None
+    status     : str            = 'نشط'
+    faculty_id : Optional[str]  = None
+    created_at : Optional[datetime] = None
+    updated_at : Optional[datetime] = None
     updated_at      : datetime

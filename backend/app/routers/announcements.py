@@ -63,15 +63,18 @@ def create_announcement(
     db.commit()
     db.refresh(announcement)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="announcement",
-        entity_id=str(announcement.id),
-        action="create",
-        description=f"Created announcement: {data.title}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="announcement",
+            entity_id=str(announcement.id),
+            action="create",
+            description=f"Created announcement: {data.title}"
+        )
+    except Exception:
+        pass
 
     return announcement
 
@@ -92,15 +95,18 @@ def update_announcement(
     db.commit()
     db.refresh(announcement)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="announcement",
-        entity_id=str(announcement_id),
-        action="update",
-        description="Updated announcement"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="announcement",
+            entity_id=str(announcement_id),
+            action="update",
+            description="Updated announcement"
+        )
+    except Exception:
+        pass
 
     return announcement
 
@@ -118,12 +124,15 @@ def delete_announcement(
     announcement.is_active = False
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="announcement",
-        entity_id=str(announcement_id),
-        action="delete",
-        description="Deleted announcement"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="announcement",
+            entity_id=str(announcement_id),
+            action="delete",
+            description="Deleted announcement"
+        )
+    except Exception:
+        pass
