@@ -171,22 +171,24 @@ class StudentCreate(StudentBase):
     student_id : str = Field(..., max_length=20)
 
 class StudentUpdate(BaseModel):
-    name          : Optional[str]   = None
-    national_id   : Optional[str]   = None
-    faculty_id    : Optional[str]   = None
-    department_id : Optional[str]   = None
-    level         : Optional[int]   = Field(None, ge=1, le=7)
-    regulation    : Optional[str]   = None
-    gpa           : Optional[float] = Field(None, ge=0.0, le=5.0)
-    phone         : Optional[str]   = None
-    email         : Optional[str]   = None
-    city          : Optional[str]   = None
-    status        : Optional[str]   = None
-    fees_status   : Optional[str]   = None
+    name            : Optional[str]   = None
+    national_id     : Optional[str]   = None
+    faculty_id      : Optional[str]   = None
+    department_id   : Optional[str]   = None
+    level           : Optional[int]   = Field(None, ge=1, le=7)
+    regulation      : Optional[str]   = None
+    gpa             : Optional[float] = Field(None, ge=0.0, le=5.0)
+    phone           : Optional[str]   = None
+    email           : Optional[str]   = None
+    city            : Optional[str]   = None
+    status          : Optional[str]   = None
+    fees_status     : Optional[str]   = None
+    graduation_year : Optional[int]   = None
 
 class StudentResponse(StudentCreate, OrmBase):
     faculty_name    : Optional[str] = None
     department_name : Optional[str] = None
+    graduation_year : Optional[int] = None
     created_at      : datetime
     updated_at      : datetime
 
