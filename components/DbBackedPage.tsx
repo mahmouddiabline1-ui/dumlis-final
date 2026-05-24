@@ -686,24 +686,6 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
         grade_points: g.grade_points ?? '-',
       }));
 
-    // Add synthetic data if no grades exist
-    if (rows.length === 0 && (students as any[]).length > 0 && (courses as any[]).length > 0) {
-      rows = (students as any[]).slice(0, 15).flatMap((s: any) =>
-        (courses as any[]).slice(0, 3).map((c: any, idx: number) => ({
-          id: `${s.student_id}-${c.id}`,
-          student_id: s.student_id,
-          course_id: c.id,
-          course_name: c.name,
-          semester: 'الفصل الأول',
-          midterm: Math.floor(Math.random() * 30) + 10,
-          final: Math.floor(Math.random() * 30) + 10,
-          assignments: Math.floor(Math.random() * 20) + 5,
-          total: Math.floor(Math.random() * 40) + 50,
-          grade_letter: 'أ',
-          grade_points: (3 + Math.random()).toFixed(1),
-        }))
-      );
-    }
     return {
       columns: ['student_id', 'course_id', 'course_name', 'semester', 'midterm', 'final', 'assignments', 'total', 'grade_letter', 'grade_points'],
       rows,
@@ -787,13 +769,15 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
     if (!facultyId) return { columns: ['message'], rows: [{ message: 'يرجى اختيار الكلية' }] };
     try {
       const ruleResp = await academicRulesApi.getByFaculty(facultyId);
+      if (!ruleResp) return { columns: ['message'], rows: [{ message: 'لا توجد قواعد أكاديمية مضافة لهذه الكلية بعد' }] };
       const rd = ruleResp?.rules_data || {};
       const rows = [
-        { rule_id: 'R1', program: 'عام', rule_type: 'الحد الأدنى للساعات', description: `${rd.min_credit_hours ?? 12} ساعة`, version: '1.0', status: 'ساري' },
-        { rule_id: 'R2', program: 'عام', rule_type: 'الحد الأقصى للساعات', description: `${rd.max_credit_hours ?? 18} ساعة`, version: '1.0', status: 'ساري' },
-        { rule_id: 'R3', program: 'عام', rule_type: 'درجة النجاح', description: `${rd.pass_grade ?? 60}%`, version: '1.0', status: 'ساري' },
-        { rule_id: 'R4', program: 'عام', rule_type: 'الحد الأدنى للمعدل', description: `${rd.gpa_pass ?? 1.0}`, version: '1.0', status: 'ساري' },
-      ];
+        { rule_id: 'R1', program: 'عام', rule_type: 'الحد الأدنى للساعات', description: `${rd.min_credit_hours ?? '-'} ساعة`, version: '1.0', status: 'ساري' },
+        { rule_id: 'R2', program: 'عام', rule_type: 'الحد الأقصى للساعات', description: `${rd.max_credit_hours ?? '-'} ساعة`, version: '1.0', status: 'ساري' },
+        { rule_id: 'R3', program: 'عام', rule_type: 'درجة النجاح', description: `${rd.pass_grade ?? '-'}%`, version: '1.0', status: 'ساري' },
+        { rule_id: 'R4', program: 'عام', rule_type: 'الحد الأدنى للمعدل', description: `${rd.gpa_pass ?? '-'}`, version: '1.0', status: 'ساري' },
+      ].filter(r => !r.description.includes('-'));
+      if (rows.length === 0) return { columns: ['message'], rows: [{ message: 'لا توجد قواعد محددة بعد' }] };
       return { columns: ['rule_id', 'program', 'rule_type', 'description', 'version', 'status'], rows };
     } catch {
       return { columns: ['message'], rows: [{ message: 'لا توجد قواعد مضافة لهذه الكلية بعد' }] };
@@ -1246,7 +1230,7 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
         student_id: student.student_id,
         name: student.name,
         level: student.level,
-        military_status: (() => {
+        military_status: profile.mil_edu_status || (() => {
           const lvl = Number(student.level) || 0;
           if (lvl <= 1) return 'لم يبدأ';
           if (lvl <= 2) return 'جاري';
@@ -1468,10 +1452,12 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
     const rows = (students as any[]).map((student) => {
       const grades_array = studentGrades.get(student.student_id) || [];
       let calculated_gpa: string;
-      if (grades_array.length > 0) {
-        calculated_gpa = (grades_array.reduce((a, b) => a + b) / grades_array.length / 20).toFixed(2);
+      if (student.gpa) {
+        calculated_gpa = (student.gpa as number).toFixed(2);
+      } else if (grades_array.length > 0) {
+        calculated_gpa = (grades_array.reduce((a, b) => a + b) / grades_array.length / 25 * 4).toFixed(2);
       } else {
-        calculated_gpa = (student.gpa || 0).toFixed(2);
+        calculated_gpa = '0.00';
       }
       const current_gpa = (student.gpa || 0).toFixed(2);
       const hasDifference = Math.abs(Number(calculated_gpa) - Number(current_gpa)) > 0.1;
