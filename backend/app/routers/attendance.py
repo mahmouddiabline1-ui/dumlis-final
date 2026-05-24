@@ -118,7 +118,7 @@ def get_attendance(
     }
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.AttendanceResponse)
 def create_attendance(
     data: schemas.AttendanceCreate,
     db: Session = Depends(get_db),
@@ -203,7 +203,7 @@ def bulk_create_attendance(
     return {"created": len(records)}
 
 
-@router.put("/{record_id}")
+@router.put("/{record_id}", response_model=schemas.AttendanceResponse)
 def update_attendance(
     record_id: int,
     data: schemas.AttendanceUpdate,

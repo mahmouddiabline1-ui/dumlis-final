@@ -64,7 +64,7 @@ def get_academic_rule(
         raise HTTPException(status_code=404, detail="Academic Rule not found or access denied")
     return rule
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.AcademicRuleResponse)
 def create_academic_rule(
     data: schemas.AcademicRuleCreate,
     db: Session = Depends(get_db),
@@ -143,7 +143,7 @@ def create_academic_rule(
 
     return rule
 
-@router.put("/{rule_id}")
+@router.put("/{rule_id}", response_model=schemas.AcademicRuleResponse)
 def update_academic_rule(
     rule_id: str,
     data: schemas.AcademicRuleUpdate,

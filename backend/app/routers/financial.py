@@ -102,7 +102,7 @@ def list_fee_setup(
     return q.all()
 
 
-@router.post("/fee-setup/", status_code=status.HTTP_201_CREATED)
+@router.post("/fee-setup/", status_code=status.HTTP_201_CREATED, response_model=schemas.FeeSetupResponse)
 def create_fee_setup(
     data: schemas.FeeSetupCreate,
     db: Session = Depends(get_db),
@@ -148,7 +148,7 @@ def get_financial_record(
         raise HTTPException(status_code=404, detail="Financial record not found or access denied")
     return r
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.FinancialRecordResponse)
 def create_financial_record(
     data: schemas.FinancialRecordCreate,
     db: Session = Depends(get_db),
@@ -195,7 +195,7 @@ def create_financial_record(
 
     return record
 
-@router.put("/{record_id}")
+@router.put("/{record_id}", response_model=schemas.FinancialRecordResponse)
 def update_financial_record(
     record_id: int,
     data: schemas.FinancialRecordUpdate,

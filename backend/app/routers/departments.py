@@ -57,7 +57,7 @@ def get_department(
     return dept
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.DepartmentResponse)
 def create_department(
     data: schemas.DepartmentCreate,
     db: Session = Depends(get_db),
@@ -78,7 +78,7 @@ def create_department(
     return dept
 
 
-@router.put("/{department_id}")
+@router.put("/{department_id}", response_model=schemas.DepartmentResponse)
 def update_department(
     department_id: str,
     data: schemas.DepartmentUpdate,

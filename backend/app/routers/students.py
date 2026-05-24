@@ -212,7 +212,7 @@ def create_student(
 
     return student
 
-@router.put("/{student_id}")
+@router.put("/{student_id}", response_model=schemas.StudentResponse)
 def update_student(
     student_id: str,
     data: schemas.StudentUpdate,

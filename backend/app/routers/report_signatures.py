@@ -50,7 +50,7 @@ def get_report_signature(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Signature not found or access denied")
     return db_signature
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=ReportSignatureResponse)
 def create_report_signature(
     signature: ReportSignatureCreate,
     db: Session = Depends(get_db),
@@ -81,7 +81,7 @@ def create_report_signature(
 
     return new_signature
 
-@router.put("/{id}")
+@router.put("/{id}", response_model=ReportSignatureResponse)
 def update_report_signature(
     id: str,
     signature_update: ReportSignatureUpdate,

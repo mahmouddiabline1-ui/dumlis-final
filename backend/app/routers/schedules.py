@@ -285,7 +285,7 @@ def get_schedule(
         raise HTTPException(status_code=404, detail="Schedule not found or access denied")
     return s
 
-@router.post("/")
+@router.post("/", response_model=schemas.CourseScheduleResponse)
 def create_schedule(
     data: schemas.CourseScheduleCreate,
     db: Session = Depends(get_db),
@@ -330,7 +330,7 @@ def create_schedule(
 
     return schedule
 
-@router.put("/{schedule_id}")
+@router.put("/{schedule_id}", response_model=schemas.CourseScheduleResponse)
 def update_schedule(
     schedule_id: int,
     data: schemas.CourseScheduleUpdate,

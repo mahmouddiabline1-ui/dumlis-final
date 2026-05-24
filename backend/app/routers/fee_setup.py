@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Union
 from app.database import get_db
 from app import models
 from app.routers.auth import get_scoped_faculty_id, get_current_user
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from decimal import Decimal
 
 router = APIRouter()
@@ -32,11 +32,16 @@ class FeeSetupCreate(BaseModel):
 
 class FeeSetupUpdate(BaseModel):
     fee_type: Optional[str] = None
-    level: Optional[str] = None
+    level: Optional[Union[str, int]] = None
     amount: Optional[float] = None
     semester: Optional[str] = None
     academic_year: Optional[str] = None
     status: Optional[str] = None
+
+    @field_validator('level', mode='before')
+    @classmethod
+    def coerce_level_to_str(cls, v):
+        return str(v) if v is not None else v
 
 @router.get("/", response_model=List[FeeSetupOut])
 def list_fee_setups(

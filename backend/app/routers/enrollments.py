@@ -63,7 +63,7 @@ def get_enrollment(
         raise HTTPException(status_code=404, detail="Enrollment not found or access denied")
     return e
 
-@router.post("/")
+@router.post("/", response_model=schemas.EnrollmentResponse)
 def create_enrollment(
     data: schemas.EnrollmentCreate,
     db: Session = Depends(get_db),
@@ -111,7 +111,7 @@ def create_enrollment(
 
     return enrollment
 
-@router.put("/{enrollment_id}")
+@router.put("/{enrollment_id}", response_model=schemas.EnrollmentResponse)
 def update_enrollment(
     enrollment_id: int,
     data: schemas.EnrollmentUpdate,

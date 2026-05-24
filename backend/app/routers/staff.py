@@ -38,7 +38,7 @@ def get_staff(
         raise HTTPException(status_code=404, detail="Staff not found")
     return staff
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.StaffResponse)
 def create_staff(
     data: schemas.StaffCreate,
     db: Session = Depends(get_db),
@@ -63,7 +63,7 @@ def create_staff(
 
     return staff
 
-@router.put("/{staff_id}")
+@router.put("/{staff_id}", response_model=schemas.StaffResponse)
 def update_staff(
     staff_id: str,
     data: schemas.StaffUpdate,

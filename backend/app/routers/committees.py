@@ -68,7 +68,7 @@ def get_committee(
     return c
 
 
-@router.post("/")
+@router.post("/", response_model=schemas.CommitteeResponse)
 def create_committee(
     data: schemas.CommitteeCreate,
     db: Session = Depends(get_db),
@@ -117,7 +117,7 @@ def create_committee(
     return committee
 
 
-@router.put("/{committee_id}")
+@router.put("/{committee_id}", response_model=schemas.CommitteeResponse)
 def update_committee(
     committee_id: int,
     data: schemas.CommitteeUpdate,
@@ -196,7 +196,7 @@ def list_committee_students(
     ).all()
 
 
-@router.post("/{committee_id}/students")
+@router.post("/{committee_id}/students", response_model=schemas.StudentCommitteeAssignmentResponse)
 def assign_student_to_committee(
     committee_id: int,
     data: schemas.StudentCommitteeAssignmentCreate,

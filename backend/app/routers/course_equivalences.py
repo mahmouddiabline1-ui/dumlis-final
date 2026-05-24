@@ -51,7 +51,7 @@ def get_course_equivalence(
     return equivalence
 
 
-@router.post("/")
+@router.post("/", response_model=schemas.CourseEquivalenceResponse)
 def create_course_equivalence(
     data: schemas.CourseEquivalenceCreate,
     db: Session = Depends(get_db),
@@ -100,7 +100,7 @@ def create_course_equivalence(
     return equivalence
 
 
-@router.put("/{equivalence_id}")
+@router.put("/{equivalence_id}", response_model=schemas.CourseEquivalenceResponse)
 def update_course_equivalence(
     equivalence_id: int,
     data: schemas.CourseEquivalenceCreate,

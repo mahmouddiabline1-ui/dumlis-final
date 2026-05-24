@@ -50,7 +50,7 @@ def get_announcement(
         raise HTTPException(status_code=404, detail="Announcement not found or expired")
     return announcement
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.AnnouncementResponse)
 def create_announcement(
     data: schemas.AnnouncementCreate,
     db: Session = Depends(get_db),
@@ -75,7 +75,7 @@ def create_announcement(
 
     return announcement
 
-@router.put("/{announcement_id}")
+@router.put("/{announcement_id}", response_model=schemas.AnnouncementResponse)
 def update_announcement(
     announcement_id: str,
     data: schemas.AnnouncementUpdate,

@@ -42,7 +42,7 @@ def get_event(
         raise HTTPException(status_code=404, detail="Event not found")
     return event
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.AcademicCalendarResponse)
 def create_event(
     data: schemas.AcademicCalendarCreate,
     db: Session = Depends(get_db),
@@ -67,7 +67,7 @@ def create_event(
 
     return event
 
-@router.put("/{event_id}")
+@router.put("/{event_id}", response_model=schemas.AcademicCalendarResponse)
 def update_event(
     event_id: str,
     data: schemas.AcademicCalendarUpdate,

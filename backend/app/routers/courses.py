@@ -75,7 +75,7 @@ def get_course(
         'semester': course.semester,
     }
 
-@router.post("/")
+@router.post("/", response_model=schemas.CourseResponse)
 def create_course(
     data: schemas.CourseCreate,
     db: Session = Depends(get_db),
@@ -125,7 +125,7 @@ def create_course(
 
     return course
 
-@router.put("/{course_id}")
+@router.put("/{course_id}", response_model=schemas.CourseResponse)
 def update_course(
     course_id: str,
     data: schemas.CourseUpdate,
@@ -199,7 +199,7 @@ def get_prerequisites(
 ):
     return db.query(models.CoursePrerequisite).filter(models.CoursePrerequisite.course_id == course_id).all()
 
-@router.post("/{course_id}/prerequisites")
+@router.post("/{course_id}/prerequisites", response_model=schemas.CoursePrerequisiteResponse)
 def add_prerequisite(
     course_id: str,
     data: schemas.CoursePrerequisiteCreate,

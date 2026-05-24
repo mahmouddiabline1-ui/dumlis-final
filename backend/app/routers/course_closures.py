@@ -51,7 +51,7 @@ def get_course_closures(
     return results
 
 
-@router.post("/")
+@router.post("/", response_model=schemas.CourseCloseResponse)
 def create_course_close(
     closure: schemas.CourseCloseCreate,
     db: Session = Depends(get_db),
@@ -99,7 +99,7 @@ def create_course_close(
     db_closure.course_name = course.name
     return db_closure
 
-@router.put("/{closure_id}")
+@router.put("/{closure_id}", response_model=schemas.CourseCloseResponse)
 def update_course_close(
     closure_id: int,
     closure_update: schemas.CourseCloseUpdate,
