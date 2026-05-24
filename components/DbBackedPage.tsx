@@ -1909,14 +1909,15 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
       const lvl = Number(student.level) || 1;
       const nextLvl = Math.min(7, lvl + 1);
       return {
-        id:           student.student_id,
-        student_id:   student.student_id,
-        student_name: student.name,
-        old_level:    `المستوى ${levels[lvl - 1] || lvl}`,
-        new_level:    `المستوى ${levels[nextLvl - 1] || nextLvl}`,
-        reason:       '',
-        date:         new Date().toISOString().split('T')[0],
-        status:       'قيد المراجعة'
+        id:            student.student_id,
+        student_id:    student.student_id,
+        student_name:  student.name,
+        old_level:     `المستوى ${levels[lvl - 1] || lvl}`,
+        new_level:     `المستوى ${levels[nextLvl - 1] || nextLvl}`,
+        new_level_raw: nextLvl,
+        reason:        '',
+        date:          new Date().toISOString().split('T')[0],
+        status:        'قيد المراجعة'
       };
     });
 

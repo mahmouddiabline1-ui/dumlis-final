@@ -16,7 +16,7 @@ from app.routers import (
     programs, regulations, academic_rules, auth,
     student_requirements, student_documents, activity_log, users,
     course_equivalences, system_settings, survey_rules, staff,
-    academic_calendar, announcements
+    academic_calendar, announcements, fee_setup
 )
 
 # ── Logging Setup ────────────────────────────────────────────────────────────
@@ -119,6 +119,7 @@ app.include_router(student_documents.router,      prefix="/student-documents",  
 app.include_router(activity_log.router,            prefix="/activity-logs",          tags=["Activity Logs"])
 app.include_router(users.router,                   prefix="/users",                  tags=["User Management"])
 app.include_router(system_settings.router,      prefix="/system-settings",        tags=["System Settings"])
+app.include_router(fee_setup.router,            prefix="/fee-setup",              tags=["Fee Setup"])
 app.include_router(survey_rules.router,         prefix="/survey-rules",           tags=["Survey Rules"])
 app.include_router(staff.router,                 prefix="/staff",                  tags=["Staff"])
 app.include_router(academic_calendar.router,    prefix="/academic-calendar",      tags=["Academic Calendar"])

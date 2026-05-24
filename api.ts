@@ -914,6 +914,21 @@ export const announcementsApi = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Fee Setup API
+// ─────────────────────────────────────────────────────────────────────────────
+export const feeSetupApi = {
+  list: (params: { faculty_id?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.faculty_id) q.set('faculty_id', params.faculty_id);
+    return request<any[]>(`/fee-setup/?${q.toString()}`);
+  },
+  get: (id: number) => request<any>(`/fee-setup/${id}`),
+  create: (data: any) => request<any>('/fee-setup/', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: number, data: any) => request<any>(`/fee-setup/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id: number) => request<void>(`/fee-setup/${id}`, { method: 'DELETE' }),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Health check
 // ─────────────────────────────────────────────────────────────────────────────
 export const checkBackend = () => request<{ status: string; version?: string }>('/health');

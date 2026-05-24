@@ -18,7 +18,15 @@ import {
   attendanceApi,
   financialApi,
   enrollmentsApi,
-  committeesApi
+  committeesApi,
+  gradesApi,
+  systemSettingsApi,
+  surveyRulesApi,
+  feeSetupApi,
+  studentRequirementsApi,
+  staffApi,
+  announcementsApi,
+  academicCalendarApi,
 } from '../api';
 
 interface DynamicPageProps {
@@ -264,6 +272,20 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
         financial_records: financialApi.create,
         enrollments: enrollmentsApi.create,
         assign_room: committeesApi.create,
+        // ── newly wired pages ──
+        advanced_student_search: studentsApi.create,
+        department_students: studentsApi.create,
+        student_data_management: studentsApi.create,
+        student_academic_profile: studentsApi.create,
+        comm_def: committeesApi.create,
+        sys_edit: (data: any) => systemSettingsApi.create(data),
+        fees_setup: (data: any) => feeSetupApi.create(data),
+        survey_rules: (data: any) => surveyRulesApi.create(data),
+        enter_grades: (data: any) => gradesApi.create(data),
+        student_affairs_requirements: (data: any) => studentRequirementsApi.create(data),
+        lecturers_staff: (data: any) => staffApi.create(data),
+        academic_calendar: (data: any) => academicCalendarApi.create(data),
+        announcements_page: (data: any) => announcementsApi.create(data),
       } as Record<string, (data: any) => Promise<any>>,
       update: {
         course_close: (id: any, data: any) => courseClosuresApi.update(id, data),
@@ -281,6 +303,24 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
         financial_records: (id: any, data: any) => financialApi.update(id, data),
         enrollments: (id: any, data: any) => enrollmentsApi.update(id, data),
         assign_room: (id: any, data: any) => committeesApi.update(id, data),
+        // ── newly wired pages ──
+        advanced_student_search: (id: any, data: any) => studentsApi.update(id, data),
+        department_students: (id: any, data: any) => studentsApi.update(id, data),
+        student_data_management: (id: any, data: any) => studentsApi.update(id, data),
+        student_academic_profile: (id: any, data: any) => studentsApi.update(id, data),
+        comm_def: (id: any, data: any) => committeesApi.update(id, data),
+        sys_edit: (id: any, data: any) => systemSettingsApi.update(id, data),
+        fees_setup: (id: any, data: any) => feeSetupApi.update(id, data),
+        survey_rules: (id: any, data: any) => surveyRulesApi.update(id, data),
+        enter_grades: (id: any, data: any) => gradesApi.update(id, data),
+        student_affairs_requirements: (id: any, data: any) => studentRequirementsApi.update(id, data),
+        lecturers_staff: (id: any, data: any) => staffApi.update(id, data),
+        academic_calendar: (id: any, data: any) => academicCalendarApi.update(id, data),
+        announcements_page: (id: any, data: any) => announcementsApi.update(id, data),
+        // ── pages that update student fields directly ──
+        gpa_mod: (id: any, data: any) => studentsApi.update(id, { gpa: parseFloat(data.new_gpa) }),
+        level_mod: (id: any, data: any) => studentsApi.update(id, { level: Number(data.new_level_raw) || Number(data.level) }),
+        grad_year: (id: any, data: any) => studentsApi.update(id, { graduation_year: parseInt(data.graduation_year) }),
       } as Record<string, (id: any, data: any) => Promise<any>>,
     };
 
