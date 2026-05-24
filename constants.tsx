@@ -274,28 +274,10 @@ export const STUDENT_NAVIGATION: any[] = [
 // ================= FACULTIES =================
 // Matches the production database (FCAI, FSC, FEN)
 export const FACULTIES: Faculty[] = [
-  {
-    id: 'FCAI',
-    name: 'كلية الحاسبات والمعلومات',
-    icon: '💻',
-    studentCount: 150,
-    staffCount: 120,
-    color: 'bg-blue-600'
-  },
-  {
-    id: 'FSC',
-    name: 'كلية العلوم',
-    icon: '🔬',
-    studentCount: 100,
-    staffCount: 80,
-    color: 'bg-green-600'
-  },
-  {
-    id: 'FEN',
-    name: 'كلية الهندسة',
-    icon: '⚙️',
-    studentCount: 100,
-    staffCount: 110,
-    color: 'bg-purple-600'
-  },
+  { id: 'FCAI', name: 'كلية الحاسبات والمعلومات', icon: '💻', studentCount: 450, staffCount: 120, color: 'bg-blue-600' },
+  { id: 'FSC',  name: 'كلية العلوم',               icon: '🔬', studentCount: 300, staffCount: 80,  color: 'bg-green-600' },
+  { id: 'FEN',  name: 'كلية الهندسة',              icon: '⚙️', studentCount: 300, staffCount: 110, color: 'bg-purple-600' },
+  { id: 'FED',  name: 'كلية التربية',              icon: '📚', studentCount: 250, staffCount: 95,  color: 'bg-yellow-600' },
+  { id: 'PHR',  name: 'كلية الصيدلة',              icon: '💊', studentCount: 200, staffCount: 85,  color: 'bg-red-600' },
+  { id: 'LAW',  name: 'كلية الحقوق',               icon: '⚖️', studentCount: 200, staffCount: 70,  color: 'bg-orange-600' },
 ];
