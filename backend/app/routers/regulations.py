@@ -64,7 +64,7 @@ def get_regulation(
         raise HTTPException(status_code=404, detail="Regulation not found or access denied")
     return regulation
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=schemas.StudyRegulationResponse, status_code=status.HTTP_201_CREATED)
 def create_regulation(
     data: schemas.StudyRegulationCreate,
     db: Session = Depends(get_db),
@@ -100,7 +100,7 @@ def create_regulation(
 
     return regulation
 
-@router.put("/{regulation_id}")
+@router.put("/{regulation_id}", response_model=schemas.StudyRegulationResponse)
 def update_regulation(
     regulation_id: str,
     data: schemas.StudyRegulationUpdate,

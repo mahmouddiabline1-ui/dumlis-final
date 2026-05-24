@@ -50,7 +50,7 @@ def get_program(
         raise HTTPException(status_code=404, detail="Program not found or access denied")
     return program
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=schemas.AcademicProgramResponse, status_code=status.HTTP_201_CREATED)
 def create_program(
     data: schemas.AcademicProgramCreate,
     db: Session = Depends(get_db),
@@ -84,7 +84,7 @@ def create_program(
 
     return program
 
-@router.put("/{program_id}")
+@router.put("/{program_id}", response_model=schemas.AcademicProgramResponse)
 def update_program(
     program_id: str,
     data: schemas.AcademicProgramUpdate,

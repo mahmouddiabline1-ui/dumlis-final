@@ -39,7 +39,7 @@ def list_users(
     return query.all()
 
 
-@router.post("/")
+@router.post("/", response_model=schemas.UserResponse, status_code=201)
 def create_user(
     user_in: schemas.UserCreate,
     db: Session = Depends(get_db),
@@ -79,7 +79,7 @@ def create_user(
     return db_user
 
 
-@router.put("/{user_id}")
+@router.put("/{user_id}", response_model=schemas.UserResponse)
 def update_user(
     user_id: uuid.UUID,
     user_in: schemas.UserUpdate,

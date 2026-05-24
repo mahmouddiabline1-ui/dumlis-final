@@ -65,7 +65,7 @@ def get_grade(
         raise HTTPException(status_code=404, detail="Grade record not found or access denied")
     return g
 
-@router.post("/")
+@router.post("/", response_model=schemas.GradeResponse, status_code=201)
 def create_grade(
     data: schemas.GradeCreate,
     db: Session = Depends(get_db),
@@ -120,7 +120,7 @@ def create_grade(
 
     return grade
 
-@router.put("/{grade_id}")
+@router.put("/{grade_id}", response_model=schemas.GradeResponse)
 def update_grade(
     grade_id: int,
     data: schemas.GradeUpdate,

@@ -57,7 +57,7 @@ def get_room(
         raise HTTPException(status_code=404, detail="Room not found or access denied")
     return room
 
-@router.post("/")
+@router.post("/", response_model=schemas.RoomResponse, status_code=201)
 def create_room(
     data: schemas.RoomCreate, 
     db: Session = Depends(get_db),
@@ -97,7 +97,7 @@ def create_room(
     db.refresh(room)
     return room
 
-@router.put("/{room_id}")
+@router.put("/{room_id}", response_model=schemas.RoomResponse)
 def update_room(
     room_id: str, 
     data: schemas.RoomUpdate, 
