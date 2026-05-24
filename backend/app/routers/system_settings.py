@@ -15,7 +15,10 @@ def list_settings(
 ):
     query = db.query(models.SystemSetting)
     if scoped_faculty_id:
-        query = query.filter(models.SystemSetting.faculty_id == scoped_faculty_id)
+        query = query.filter(
+            (models.SystemSetting.faculty_id == scoped_faculty_id) |
+            (models.SystemSetting.faculty_id == None)
+        )
     return query.all()
 
 @router.post("/", response_model=schemas.SystemSetting, status_code=status.HTTP_201_CREATED)
