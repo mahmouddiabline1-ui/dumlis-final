@@ -1001,14 +1001,13 @@ class SurveyRuleUpdate(BaseModel):
         return None if v == '' else v
 
 class SurveyRuleResponse(OrmBase):
-    id         : str
+    id         : uuid.UUID
     code       : str
     name       : str
-    target     : Optional[str]  = None
-    start_date : Optional[date] = None
-    end_date   : Optional[date] = None
-    status     : str            = 'نشط'
-    faculty_id : Optional[str]  = None
+    target     : Optional[str]      = None
+    start_date : Optional[datetime] = None
+    end_date   : Optional[datetime] = None
+    status     : str                = 'نشط'
+    faculty_id : Optional[str]      = None
     created_at : Optional[datetime] = None
     updated_at : Optional[datetime] = None
-    updated_at      : datetime
