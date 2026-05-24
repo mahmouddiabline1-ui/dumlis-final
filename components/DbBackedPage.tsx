@@ -704,6 +704,7 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
     const rows = (attendance as any[]).map((a: any) => {
       const attDate = a.attendance_date ? new Date(a.attendance_date) : new Date();
       return {
+        id:           a.id,
         student_id:   a.student_id,
         student_name: studentMap.get(a.student_id) || '-',
         course_id:    a.course_id,
@@ -1945,7 +1946,7 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
           value: setting.value || '-',
           description: setting.description || '-',
           category: setting.category || 'عام',
-          status: setting.is_active ? 'نشط' : 'غير نشط',
+          status: (setting.is_active === true || setting.status === 'Active' || setting.status === 'نشط') ? 'نشط' : 'غير نشط',
         }))
       : [
           { id: '1', name: 'الحد الأدنى للمعدل', value: '2.0', description: 'الحد الأدنى للمعدل التراكمي', category: 'أكاديمي', status: 'نشط' },

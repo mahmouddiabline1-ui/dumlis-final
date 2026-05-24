@@ -1363,6 +1363,7 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
                         block_reg_by_renewal: FORM_OPTIONS.student_reg_status,
                         attendance_log: FORM_OPTIONS.attendance_status,
                         add_attendance: FORM_OPTIONS.attendance_status,
+                        gpa_mod: ['قيد المراجعة', 'موافق عليه'],
                         financial_records: FORM_OPTIONS.financial_status,
                         fees_collect: FORM_OPTIONS.financial_status,
                         payment_perm: FORM_OPTIONS.financial_status,
