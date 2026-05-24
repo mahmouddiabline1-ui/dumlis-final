@@ -188,6 +188,26 @@ class LookupApiService {
   }
 
   /**
+   * Get students for autocomplete (returns student_id list)
+   */
+  async getStudents(facultyId?: string) {
+    const fId = facultyId || this.activeFacultyId;
+    const key = fId ? `students_${fId}` : 'students';
+    return this.getCached(key, async () => {
+      try {
+        const students = await api.studentsApi.list(fId ? { faculty_id: fId } : {});
+        return students.map((s: any) => ({
+          student_id: s.student_id || s.id,
+          name: s.name,
+        }));
+      } catch (e) {
+        console.warn('Failed to fetch students for autocomplete', e);
+        return [];
+      }
+    }, 2 * 60 * 1000); // 2 min TTL
+  }
+
+  /**
    * Get committees (for display in dropdowns if needed)
    */
   async getCommittees() {

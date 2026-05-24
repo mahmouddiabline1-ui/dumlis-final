@@ -99,15 +99,18 @@ def create_enrollment(
     db.commit()
     db.refresh(enrollment)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="enrollment",
-        entity_id=str(enrollment.id),
-        action="create",
-        description=f"Enrolled {data.student_id} in {data.course_id}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="enrollment",
+            entity_id=str(enrollment.id),
+            action="create",
+            description=f"Enrolled {data.student_id} in {data.course_id}"
+        )
+    except Exception:
+        pass
 
     return enrollment
 
@@ -131,15 +134,18 @@ def update_enrollment(
     db.commit()
     db.refresh(e)
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="enrollment",
-        entity_id=str(enrollment_id),
-        action="update",
-        description=f"Updated enrollment status to {data.status}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="enrollment",
+            entity_id=str(enrollment_id),
+            action="update",
+            description=f"Updated enrollment status to {data.status}"
+        )
+    except Exception:
+        pass
 
     return e
 
@@ -157,15 +163,19 @@ def delete_enrollment(
     e = q.first()
     if not e:
         raise HTTPException(status_code=404, detail="Enrollment not found or access denied")
+    student_id_ref = e.student_id
     db.delete(e)
     db.commit()
 
-    log_activity(
-        db=db,
-        user_id=user.id,
-        faculty_id=scoped_faculty_id,
-        entity_type="enrollment",
-        entity_id=str(enrollment_id),
-        action="delete",
-        description=f"Deleted enrollment for {e.student_id}"
-    )
+    try:
+        log_activity(
+            db=db,
+            user_id=user.id,
+            faculty_id=scoped_faculty_id,
+            entity_type="enrollment",
+            entity_id=str(enrollment_id),
+            action="delete",
+            description=f"Deleted enrollment for {student_id_ref}"
+        )
+    except Exception:
+        pass

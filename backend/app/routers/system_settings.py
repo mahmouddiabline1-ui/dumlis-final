@@ -58,7 +58,10 @@ def update_setting(
 ):
     query = db.query(models.SystemSetting).filter(models.SystemSetting.id == setting_id)
     if scoped_faculty_id:
-        query = query.filter(models.SystemSetting.faculty_id == scoped_faculty_id)
+        query = query.filter(
+            (models.SystemSetting.faculty_id == scoped_faculty_id) |
+            (models.SystemSetting.faculty_id == None)
+        )
 
     setting = query.first()
     if not setting:

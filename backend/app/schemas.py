@@ -142,7 +142,10 @@ class StudentProfileCreate(StudentProfileBase):
     student_id: str = Field(..., max_length=20)
 
 class StudentProfileUpdate(StudentProfileBase):
-    pass
+    @field_validator('birth_date', 'qual_date', 'postponement_date', 'mil_edu_completion', mode='before')
+    @classmethod
+    def empty_date_to_none(cls, v):
+        return None if v == '' else v
 
 class StudentProfileResponse(StudentProfileCreate, OrmBase):
     id         : uuid.UUID
@@ -463,8 +466,14 @@ class FinancialRecordCreate(FinancialRecordBase):
 class FinancialRecordUpdate(BaseModel):
     paid_amount  : Optional[float] = None
     payment_date : Optional[date]  = None
+    due_date     : Optional[date]  = None
     receipt_no   : Optional[str]   = None
     status       : Optional[str]   = None
+
+    @field_validator('payment_date', 'due_date', mode='before')
+    @classmethod
+    def empty_date_to_none(cls, v):
+        return None if v == '' else v
 
 class FinancialRecordResponse(FinancialRecordBase, OrmBase):
     id         : int
@@ -498,6 +507,11 @@ class CommitteeUpdate(BaseModel):
     supervisor : Optional[str]  = None
     exam_date  : Optional[date] = None
     exam_time  : Optional[time] = None
+
+    @field_validator('exam_date', 'exam_time', mode='before')
+    @classmethod
+    def empty_to_none(cls, v):
+        return None if v == '' else v
 
 class CommitteeResponse(CommitteeBase, OrmBase):
     id                : int
@@ -570,6 +584,11 @@ class StudentBlockUpdate(BaseModel):
     unblock_date : Optional[date] = None
     notes        : Optional[str]  = None
 
+    @field_validator('unblock_date', mode='before')
+    @classmethod
+    def empty_date_to_none(cls, v):
+        return None if v == '' else v
+
 class StudentBlockResponse(StudentBlockBase, OrmBase):
     id         : int
     block_date : date
@@ -621,6 +640,11 @@ class CourseCloseUpdate(BaseModel):
     semester      : Optional[str]  = None
     closure_date  : Optional[date] = None
     status        : Optional[str]  = None
+
+    @field_validator('closure_date', mode='before')
+    @classmethod
+    def empty_date_to_none(cls, v):
+        return None if v == '' else v
 
 class CourseCloseResponse(CourseCloseBase, OrmBase):
     id           : int
@@ -904,6 +928,11 @@ class AcademicCalendarUpdate(BaseModel):
     academic_year   : Optional[str] = None
     description     : Optional[str] = None
 
+    @field_validator('start_date', 'end_date', mode='before')
+    @classmethod
+    def empty_date_to_none(cls, v):
+        return None if v == '' else v
+
 class AcademicCalendarResponse(AcademicCalendarBase, OrmBase):
     id              : uuid.UUID
     created_at      : datetime
@@ -930,6 +959,11 @@ class AnnouncementUpdate(BaseModel):
     priority        : Optional[str] = None
     expires_at      : Optional[datetime] = None
     is_active       : Optional[bool] = None
+
+    @field_validator('expires_at', mode='before')
+    @classmethod
+    def empty_dt_to_none(cls, v):
+        return None if v == '' else v
 
 class AnnouncementResponse(AnnouncementBase, OrmBase):
     id              : uuid.UUID

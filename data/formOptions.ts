@@ -77,17 +77,38 @@ const STATIC_OPTIONS = {
     'المستوى الأول',
     'المستوى الثاني',
     'المستوى الثالث',
-    'المستوى الرابع'
+    'المستوى الرابع',
+    'المستوى الخامس',
+    'المستوى السادس',
+    'المستوى السابع'
+  ],
+
+  level_options: [
+    { label: 'المستوى الأول', value: '1' },
+    { label: 'المستوى الثاني', value: '2' },
+    { label: 'المستوى الثالث', value: '3' },
+    { label: 'المستوى الرابع', value: '4' },
+    { label: 'المستوى الخامس', value: '5' },
+    { label: 'المستوى السادس', value: '6' },
+    { label: 'المستوى السابع', value: '7' },
   ],
 
   student_status: [
     'مقيد',
+    'نشط',
     'موقوف',
     'خريج',
     'مفصول',
     'منقول',
     'مستجد'
   ],
+
+  enrollment_status: ['مسجل', 'منسحب', 'مؤجل', 'معلق'],
+  student_reg_status: ['قيد المراجعة', 'مقبول', 'مرفوض'],
+  financial_status: ['مسدد', 'غير مسدد', 'مسدد جزئياً'],
+  committee_status: ['active', 'completed', 'cancelled'],
+  closure_status: ['مكتمل', 'مفتوح', 'مغلق'],
+  active_inactive: ['نشط', 'غير نشط'],
 
   fees_status: [
     'مسدد',
@@ -120,12 +141,12 @@ const STATIC_OPTIONS = {
   ],
 
   semesters: [
-    'خريف 2024',
-    'ربيع 2025',
-    'صيف 2024',
-    'خريف 2023',
-    'ربيع 2024',
-    'صيف 2023'
+    '2024-2025 خريف',
+    '2024-2025 ربيع',
+    '2025-2026 خريف',
+    '2025-2026 ربيع',
+    '2023-2024 خريف',
+    '2023-2024 ربيع',
   ],
 
   academic_years: [
@@ -173,8 +194,8 @@ const STATIC_OPTIONS = {
   attendance_status: [
     'حاضر',
     'غائب',
-    'غياب بعذر',
-    'متأخر'
+    'متأخر',
+    'معذور'
   ],
 
   grade_letters: [
@@ -202,7 +223,8 @@ export const FORM_OPTIONS = {
   instructor_names: [] as string[],
   departments: [] as string[],
   rooms: [] as string[],
-  faculties: [] as string[]
+  faculties: [] as string[],
+  student_ids: [] as string[],
 };
 
 /**
@@ -238,6 +260,14 @@ export async function loadDynamicOptions() {
     const instructors = await lookupApi.getInstructors();
     FORM_OPTIONS.instructor_names = instructors.map(i => i.name);
 
+    // Load student IDs for autocomplete
+    try {
+      const students = await lookupApi.getStudents();
+      FORM_OPTIONS.student_ids = students.map((s: any) => s.student_id || s.id);
+    } catch (_) {
+      // non-critical
+    }
+
     console.log('✅ Dynamic form options loaded successfully');
     return true;
   } catch (error) {
@@ -263,6 +293,10 @@ export const getFieldOptions = (fieldKey: string): string[] => {
     'الساعات_الأسبوعية': FORM_OPTIONS.weekly_hours,
     'status': FORM_OPTIONS.status_options,
     'الحالة': FORM_OPTIONS.status_options,
+    'enrollment_status': FORM_OPTIONS.enrollment_status,
+    'request_status': FORM_OPTIONS.student_reg_status,
+    'payment_status': FORM_OPTIONS.financial_status,
+    'student_id': FORM_OPTIONS.student_ids,
     'day': FORM_OPTIONS.days,
     'اليوم': FORM_OPTIONS.days,
     'time': FORM_OPTIONS.time_slots,
@@ -298,7 +332,8 @@ export const getFieldOptions = (fieldKey: string): string[] => {
     'grade': FORM_OPTIONS.grade_letters,
     'registration_status': FORM_OPTIONS.registration_status,
     'category': FORM_OPTIONS.setting_categories,
-    'التصنيف': FORM_OPTIONS.setting_categories
+    'التصنيف': FORM_OPTIONS.setting_categories,
+    'course_id': FORM_OPTIONS.course_codes,
   };
 
   return fieldMapping[fieldKey] || [];
@@ -314,7 +349,8 @@ export const shouldUseDropdown = (fieldKey: string, fieldLabel: string): boolean
     'city', 'المدينة', 'faculty', 'الكلية', 'semester', 'الفصل_الدراسي',
     'academic_year', 'العام_الأكاديمي', 'graduation_year', 'عام_التخرج', 'schedule_status', 'courses_count', 'عدد_المقررات',
     'course_type', 'session_type', 'attendance_status', 'grade', 'registration_status',
-    'category', 'التصنيف'
+    'category', 'التصنيف', 'student_id', 'course_id',
+    'enrollment_status', 'request_status', 'payment_status',
   ];
 
   return dropdownFields.includes(fieldKey) ||

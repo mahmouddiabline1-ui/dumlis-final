@@ -1330,8 +1330,58 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
                     );
                   }
 
+                  // Level field: show Arabic labels, submit integer values
+                  if (col.key === 'level' && FORM_OPTIONS.level_options?.length > 0) {
+                    return (
+                      <div key={col.key} className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700 block">{col.label}</label>
+                        <select
+                          value={value}
+                          onChange={(e) => setFormData({ ...formData, [col.key]: e.target.value })}
+                          disabled={isReadOnly}
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none transition-shadow disabled:bg-gray-50 bg-white"
+                          required={modalType === 'add'}
+                        >
+                          <option value="">اختر المستوى...</option>
+                          {FORM_OPTIONS.level_options.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  }
+
+                  // Context-aware status options based on page type
+                  const getContextualOptions = (colKey: string): string[] => {
+                    if (colKey === 'status') {
+                      const pageStatusMap: Record<string, string[]> = {
+                        enrollments: FORM_OPTIONS.enrollment_status,
+                        academic_reg: FORM_OPTIONS.enrollment_status,
+                        review_student_reg: FORM_OPTIONS.student_reg_status,
+                        manage_reg_issues: FORM_OPTIONS.student_reg_status,
+                        balance_reg: FORM_OPTIONS.student_reg_status,
+                        block_reg_by_renewal: FORM_OPTIONS.student_reg_status,
+                        attendance_log: FORM_OPTIONS.attendance_status,
+                        add_attendance: FORM_OPTIONS.attendance_status,
+                        financial_records: FORM_OPTIONS.financial_status,
+                        fees_collect: FORM_OPTIONS.financial_status,
+                        payment_perm: FORM_OPTIONS.financial_status,
+                        course_close: FORM_OPTIONS.closure_status,
+                        assign_room: FORM_OPTIONS.committee_status,
+                        comm_def: FORM_OPTIONS.committee_status,
+                        sys_edit: FORM_OPTIONS.active_inactive,
+                        announcements_page: FORM_OPTIONS.active_inactive,
+                        info_board: FORM_OPTIONS.active_inactive,
+                        lecturers_staff: FORM_OPTIONS.active_inactive,
+                        fees_setup: FORM_OPTIONS.active_inactive,
+                      };
+                      return pageStatusMap[config.id] || getFieldOptions(colKey);
+                    }
+                    return getFieldOptions(colKey);
+                  };
+
                   // Check if this field should use dropdown
-                  const fieldOptions = getFieldOptions(col.key);
+                  const fieldOptions = getContextualOptions(col.key);
                   const useDropdown = shouldUseDropdown(col.key, col.label) || fieldOptions.length > 0;
 
                   // Special handling for course name - auto-fill from course code
@@ -1343,6 +1393,27 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
                   }
 
                   if (useDropdown && fieldOptions.length > 0) {
+                    // Use datalist (searchable autocomplete) for large option sets
+                    if (fieldOptions.length > 20) {
+                      return (
+                        <div key={col.key} className="space-y-2">
+                          <label className="text-sm font-medium text-gray-700 block">{col.label}</label>
+                          <input
+                            list={`dl-${col.key}-${config.id}`}
+                            value={value}
+                            onChange={(e) => setFormData({ ...formData, [col.key]: e.target.value })}
+                            disabled={isReadOnly}
+                            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none transition-shadow disabled:bg-gray-50"
+                            placeholder={`ابدأ الكتابة للبحث في ${col.label}...`}
+                            required={modalType === 'add'}
+                          />
+                          <datalist id={`dl-${col.key}-${config.id}`}>
+                            {fieldOptions.map((opt) => <option key={opt} value={opt} />)}
+                          </datalist>
+                        </div>
+                      );
+                    }
+
                     return (
                       <div key={col.key} className="space-y-2">
                         <label className="text-sm font-medium text-gray-700 block">{col.label}</label>
@@ -1350,7 +1421,7 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
                           value={value}
                           onChange={(e) => {
                             const newFormData = { ...formData, [col.key]: e.target.value };
-                            
+
                             // Auto-fill course name when course code is selected
                             if (col.key === 'course_code') {
                               const courseName = FORM_OPTIONS.course_names[e.target.value as keyof typeof FORM_OPTIONS.course_names];
@@ -1358,7 +1429,7 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
                                 newFormData.course_name = courseName;
                               }
                             }
-                            
+
                             setFormData(newFormData);
                           }}
                           disabled={isReadOnly}
