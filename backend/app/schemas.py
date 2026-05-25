@@ -186,7 +186,13 @@ class StudentUpdate(BaseModel):
     city            : Optional[str]   = None
     status          : Optional[str]   = None
     fees_status     : Optional[str]   = None
-    graduation_year : Optional[int]   = None
+    graduation_year  : Optional[int]   = None
+    gpa_mod_status   : Optional[str]   = None
+    gpa_mod_reason   : Optional[str]   = None
+    level_mod_status : Optional[str]   = None
+    level_mod_reason : Optional[str]   = None
+    survey_status    : Optional[str]   = None
+    id_card_status   : Optional[str]   = None
 
 class StudentResponse(StudentCreate, OrmBase):
     faculty_name    : Optional[str] = None
