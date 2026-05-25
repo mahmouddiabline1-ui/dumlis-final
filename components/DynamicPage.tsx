@@ -31,6 +31,7 @@ import {
   programsApi,
   academicRulesApi,
   studentProfileApi,
+  regulationsApi,
 } from '../api';
 
 interface DynamicPageProps {

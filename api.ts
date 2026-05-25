@@ -368,6 +368,16 @@ export const studentsApi = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Student Profile API
+// ─────────────────────────────────────────────────────────────────────────────
+export const studentProfileApi = {
+  get: (studentId: string) =>
+    request<any>(`/students/${studentId}/profile`),
+  update: (studentId: string, data: any) =>
+    request<any>(`/students/${studentId}/profile`, { method: 'POST', body: JSON.stringify(data) }),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Courses API
 // ─────────────────────────────────────────────────────────────────────────────
 export const coursesApi = {

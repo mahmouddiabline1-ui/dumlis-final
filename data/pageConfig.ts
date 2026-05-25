@@ -2251,9 +2251,7 @@ export const MOCK_DATABASE: Record<string, PageConfig> = {
       { key: 'program_name', label: 'اسم البرنامج' },
       { key: 'degree', label: 'الدرجة العلمية' },
       { key: 'department', label: 'القسم' },
-      { key: 'duration', label: 'المدة (سنوات)' },
       { key: 'total_hours', label: 'إجمالي الساعات' },
-      { key: 'status', label: 'الحالة', type: 'status' }
     ],
     data: [
       { program_id: 'CS-B', program_name: 'بكالوريوس علوم الحاسب', degree: 'بكالوريوس', department: 'علوم الحاسب', duration: '4', total_hours: '132', status: 'نشط' },
@@ -2305,7 +2303,7 @@ export const MOCK_DATABASE: Record<string, PageConfig> = {
       { key: 'level', label: 'المستوى' },
       { key: 'hours', label: 'الساعات المعتمدة' },
       { key: 'type', label: 'النوع' },
-      { key: 'status', label: 'الحالة', type: 'status' }
+      { key: 'semester', label: 'الفصل الدراسي' }
     ],
     data: [
       { course_code: 'CS101', course_name: 'مقدمة في البرمجة', program: 'علوم الحاسب', level: 'المستوى الأول', hours: 3, type: 'إجباري', status: 'نشط' },
@@ -2333,7 +2331,6 @@ export const MOCK_DATABASE: Record<string, PageConfig> = {
       { key: 'program', label: 'البرنامج' },
       { key: 'courses_count', label: 'عدد المقررات' },
       { key: 'approval_date', label: 'تاريخ الاعتماد', type: 'date' },
-      { key: 'status', label: 'الحالة', type: 'status' }
     ],
     data: [
       { bylaw_id: 'BYL-FCAI-2020', bylaw_name: 'لائحة كلية الحاسبات 2020', program: 'جميع البرامج', courses_count: '45', approval_date: '2020-09-01', status: 'ساري' },
@@ -2411,7 +2408,6 @@ export const MOCK_DATABASE: Record<string, PageConfig> = {
       { key: 'fee_type', label: 'نوع الرسوم' },
       { key: 'amount', label: 'المبلغ', type: 'currency' },
       { key: 'level', label: 'المستوى' },
-      { key: 'date', label: 'تاريخ التجهيز', type: 'date' },
       { key: 'status', label: 'الحالة', type: 'status' }
     ],
     data: [],
@@ -2615,7 +2611,6 @@ export const MOCK_DATABASE: Record<string, PageConfig> = {
       { key: 'students_count', label: 'عدد الطلاب' },
       { key: 'programs_count', label: 'عدد البرامج' },
       { key: 'courses_count', label: 'عدد المقررات' },
-      { key: 'status', label: 'الحالة', type: 'status' }
     ],
     data: [
       { code: 'CS', name: 'علوم الحاسب (CS)', students_count: 400, programs_count: 2, courses_count: 15, status: 'نشط' },
@@ -2640,7 +2635,6 @@ export const MOCK_DATABASE: Record<string, PageConfig> = {
       { key: 'name', label: 'اسم التخصص' },
       { key: 'head_name', label: 'رئيس القسم' },
       { key: 'students_count', label: 'عدد الطلاب' },
-      { key: 'status', label: 'الحالة', type: 'status' }
     ],
     data: [
       { code: 'CS', name: 'علوم الحاسب (CS)', head_name: 'د. أحمد محمد السيد', students_count: 400, status: 'نشط' },
