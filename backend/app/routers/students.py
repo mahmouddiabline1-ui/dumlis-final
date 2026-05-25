@@ -66,6 +66,10 @@ def list_students(
             'city': s.city,
             'status': s.status,
             'fees_status': s.fees_status,
+            'gpa_mod_status'  : s.gpa_mod_status,
+            'gpa_mod_reason'  : s.gpa_mod_reason,
+            'level_mod_status': s.level_mod_status,
+            'level_mod_reason': s.level_mod_reason,
         }
         for s in students
     ]

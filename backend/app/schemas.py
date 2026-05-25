@@ -195,11 +195,15 @@ class StudentUpdate(BaseModel):
     id_card_status   : Optional[str]   = None
 
 class StudentResponse(StudentCreate, OrmBase):
-    faculty_name    : Optional[str] = None
-    department_name : Optional[str] = None
-    graduation_year : Optional[int] = None
-    created_at      : datetime
-    updated_at      : datetime
+    faculty_name     : Optional[str] = None
+    department_name  : Optional[str] = None
+    graduation_year  : Optional[int] = None
+    gpa_mod_status   : Optional[str] = None
+    gpa_mod_reason   : Optional[str] = None
+    level_mod_status : Optional[str] = None
+    level_mod_reason : Optional[str] = None
+    created_at       : datetime
+    updated_at       : datetime
 
 class StudentWithProfileResponse(StudentResponse):
     profile : Optional[StudentProfileResponse] = None
