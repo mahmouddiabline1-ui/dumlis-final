@@ -70,6 +70,9 @@ def list_students(
             'gpa_mod_reason'  : s.gpa_mod_reason,
             'level_mod_status': s.level_mod_status,
             'level_mod_reason': s.level_mod_reason,
+            'survey_status'   : s.survey_status,
+            'id_card_status'  : s.id_card_status,
+            'graduation_year' : s.graduation_year,
         }
         for s in students
     ]

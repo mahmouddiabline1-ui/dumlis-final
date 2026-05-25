@@ -19,7 +19,9 @@ import {
   roomsApi,
   regRequestsApi as registrationRequestsApi,
   activityLogsApi,
-  surveyRulesApi
+  surveyRulesApi,
+  announcementsApi,
+  feeSetupApi
 } from '../api';
 import DynamicPage from './DynamicPage';
 import { getPageConfig } from '../data/pageConfig';
@@ -311,7 +313,7 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
     const students = await studentsApi.listAll({ faculty_id: facultyId });
     return {
       columns: ['student_id', 'name', 'national_id', 'faculty_id', 'department_id', 'level', 'status', 'regulation'],
-      rows: students as any[],
+      rows: (students as any[]).map((s: any) => ({ ...s, id: s.student_id })),
     };
   }
 
@@ -447,16 +449,14 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
   if (pageId === 'program_data') {
     const programs = await programsApi.list({});
     return {
-      columns: ['program_id', 'program_name', 'degree', 'department', 'duration', 'total_hours', 'status'],
+      columns: ['program_id', 'program_name', 'degree', 'department', 'total_hours'],
       rows: programs.map((p: any) => ({
         id: p.id,
         program_id: p.id,
         program_name: p.name,
         degree: p.degree || 'بكالوريوس',
         department: p.department_id || 'N/A',
-        duration: p.duration ? `${p.duration} سنوات` : '-',
-        total_hours: p.total_hours || 132,
-        status: p.is_active ? 'نشط' : 'غير نشط',
+        total_hours: p.total_hours || 0,
       }))
     };
   }
@@ -473,7 +473,7 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
     (programs as any[]).forEach((p) => { const d = p.department_id || 'N/A'; programsByDept.set(d, (programsByDept.get(d) || 0) + 1); });
     (courses as any[]).forEach((c) => { const d = c.department_id || 'N/A'; coursesByDept.set(d, (coursesByDept.get(d) || 0) + 1); });
     return {
-      columns: ['code', 'name', 'students_count', 'programs_count', 'courses_count', 'status'],
+      columns: ['code', 'name', 'students_count', 'programs_count', 'courses_count'],
       rows: (departments as any[]).map((d) => ({
         id: d.id,
         code: d.code || '-',
@@ -481,7 +481,6 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
         students_count: studentsByDept.get(d.id) || 0,
         programs_count: programsByDept.get(d.id) || 0,
         courses_count: coursesByDept.get(d.id) || 0,
-        status: 'نشط',
       })),
     };
   }
@@ -492,14 +491,13 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
     const studentsByDept = new Map<string, number>();
     students.forEach((s: any) => { const d = s.department_id || 'N/A'; studentsByDept.set(d, (studentsByDept.get(d) || 0) + 1); });
     return {
-      columns: ['code', 'name', 'head_name', 'students_count', 'status'],
+      columns: ['code', 'name', 'head_name', 'students_count'],
       rows: (departments as any[]).map((d) => ({
         id: d.id,
         code: d.code || '-',
         name: d.name,
         head_name: d.head_name || '-',
         students_count: studentsByDept.get(d.id) || 0,
-        status: 'نشط',
       })),
     };
   }
@@ -539,9 +537,8 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
   if (pageId === 'course_catalog' || pageId === 'study_courses') {
     const courses = await coursesApi.list({ faculty_id: facultyId });
     return {
-      columns: pageId === 'course_catalog' ? ['id', 'name', 'level', 'department', 'hours', 'type', 'semester'] : ['course_code', 'course_name', 'program', 'level', 'hours', 'type', 'status'],
+      columns: pageId === 'course_catalog' ? ['id', 'name', 'level', 'department', 'hours', 'type', 'semester'] : ['course_code', 'course_name', 'program', 'level', 'hours', 'type', 'semester'],
       rows: (courses as any[]).map((c) => ({
-        // Mapping for both sets of keys to be safe
         id: c.id,
         course_code: c.id,
         name: c.name,
@@ -551,8 +548,7 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
         level: pageId === 'course_catalog' ? (c.level || 1) : `المستوى ${c.level || 1}`,
         hours: c.credit_hours || 3,
         type: c.course_type || 'إجباري',
-        status: 'نشط',
-        semester: c.semester || 'خريف',
+        semester: c.semester || '-',
       }))
     };
   }
@@ -562,20 +558,15 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
       regulationsApi.list({}),
       coursesApi.list({ faculty_id: facultyId }),
     ]);
-
-    // Courses are linked to faculty_id and department, not program_id — count by faculty
-    const totalCourses = (courses as any[]).length;
-
     return {
-      columns: ['bylaw_id', 'bylaw_name', 'program', 'courses_count', 'approval_date', 'status'],
+      columns: ['bylaw_id', 'bylaw_name', 'program', 'courses_count', 'approval_date'],
       rows: (regulations as any[]).map((r: any) => ({
         id: r.id,
         bylaw_id: r.id,
         bylaw_name: r.name,
         program: r.program_name || r.program_id || 'عام',
-        courses_count: totalCourses,
+        courses_count: (courses as any[]).filter((c) => c.program_id === r.program_id).length,
         approval_date: r.created_at ? r.created_at.toString().split('T')[0] : '',
-        status: 'نشط',
       })),
     };
   }
@@ -1379,36 +1370,18 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
   }
 
   if (pageId === 'fees_setup') {
-    const [financial, students] = await Promise.all([
-      financialApi.listAll({ faculty_id: facultyId }),
-      studentsApi.listAll({ faculty_id: facultyId }),
-    ]);
-
-    const studentLevelMap = new Map((students as any[]).map(s => [s.student_id, s.level]));
-    const seen = new Set<string>();
-    const currentYear = new Date().getFullYear();
-
-    const rows = (financial as any[])
-      .filter((r: any) => {
-        const key = `${r.semester || 'الأول'}-${r.academic_year || `${currentYear}/${currentYear + 1}`}-${r.fee_type}-${studentLevelMap.get(r.student_id) || 1}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((record: any) => ({
-        id: record.id,
-        semester: record.semester || 'الأول',
-        academic_year: record.academic_year || `${currentYear}/${currentYear + 1}`,
-        fee_type: record.fee_type || 'رسوم عامة',
-        amount: Number(record.amount) || 0,
-        level: studentLevelMap.get(record.student_id) || '-',
-        date: record.created_at ? record.created_at.toString().split('T')[0] : '',
-        status: 'نشط',
-      }));
-
+    const feeSetups = await feeSetupApi.list({ faculty_id: facultyId });
     return {
-      columns: ['semester', 'academic_year', 'fee_type', 'amount', 'level', 'date', 'status'],
-      rows,
+      columns: ['semester', 'academic_year', 'fee_type', 'amount', 'level', 'status'],
+      rows: (feeSetups as any[]).map((f: any) => ({
+        id: f.id,
+        semester: f.semester || '-',
+        academic_year: f.academic_year || '-',
+        fee_type: f.fee_type || '-',
+        amount: Number(f.amount) || 0,
+        level: f.level || '-',
+        status: (f.status === 'نشط' || f.status === 'Active') ? 'نشط' : 'غير نشط',
+      })),
     };
   }
 
@@ -1470,9 +1443,9 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
         old_gpa:         current_gpa,
         new_gpa:         calculated_gpa,
         difference:      (Number(calculated_gpa) - Number(current_gpa)).toFixed(2),
-        reason:          '',
+        reason:          student.gpa_mod_reason || '',
         date:            new Date().toISOString().split('T')[0],
-        status:          hasDifference ? 'قيد المراجعة' : 'موافق عليه'
+        status:          student.gpa_mod_status || (hasDifference ? 'قيد المراجعة' : 'موافق عليه'),
       };
     });
 
@@ -1529,30 +1502,34 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
   }
 
   if (pageId === 'multiple_courses_reg') {
-    const students = await studentsApi.listAll({ faculty_id: facultyId });
-    const enrollments = await enrollmentsApi.listAll({});
-
-    const enrollMap = new Map<string, number>();
-    (enrollments as any[]).forEach((e) => enrollMap.set(e.student_id, (enrollMap.get(e.student_id) || 0) + 1));
-
+    const [students, enrollments, courses] = await Promise.all([
+      studentsApi.listAll({ faculty_id: facultyId }),
+      enrollmentsApi.listAll({}),
+      coursesApi.list({ faculty_id: facultyId }),
+    ]);
+    const courseMap = new Map((courses as any[]).map((c) => [c.id, c]));
+    const enrollMap = new Map<string, { count: number; hours: number }>();
+    (enrollments as any[]).forEach((e) => {
+      const entry = enrollMap.get(e.student_id) || { count: 0, hours: 0 };
+      const course = courseMap.get(e.course_id);
+      entry.count++;
+      entry.hours += Number(course?.credit_hours) || 3;
+      enrollMap.set(e.student_id, entry);
+    });
     const rows = (students as any[])
-      .filter((s) => (enrollMap.get(s.student_id) || 0) > 0)
+      .filter((s) => (enrollMap.get(s.student_id)?.count || 0) > 0)
       .map((student) => {
-        const count = enrollMap.get(student.student_id) || 0;
+        const { count, hours } = enrollMap.get(student.student_id) || { count: 0, hours: 0 };
         return {
-          id:           student.student_id,
-          student_id:   student.student_id,
-          name:         student.name,
+          id:            student.student_id,
+          student_id:    student.student_id,
+          name:          student.name,
           courses_count: count,
-          total_hours:  count * 3,
-          status:       student.status || 'نشط',
+          total_hours:   hours,
+          status:        student.status || '-',
         };
       });
-
-    return {
-      columns: ['student_id', 'name', 'courses_count', 'total_hours', 'status'],
-      rows,
-    };
+    return { columns: ['student_id', 'name', 'courses_count', 'total_hours', 'status'], rows };
   }
 
   if (pageId === 'review_student_reg') {
@@ -1680,7 +1657,7 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
     const blockedStudents = students.filter((s: any) =>
       s.fees_status === 'غير مسدد' || s.status === 'متوقف_عن_الدراسة' || s.status === 'موقوف'
     );
-    const displayStudents = blockedStudents.length > 0 ? blockedStudents : students.slice(0, 20);
+    const displayStudents = blockedStudents;
     return {
       columns: ['student_id', 'name', 'renewal_status', 'block_reason', 'status'],
       rows: displayStudents.map((s: any) => ({
@@ -1902,9 +1879,9 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
         old_level:     `المستوى ${levels[lvl - 1] || lvl}`,
         new_level:     `المستوى ${levels[nextLvl - 1] || nextLvl}`,
         new_level_raw: nextLvl,
-        reason:        '',
+        reason:        student.level_mod_reason || '',
         date:          new Date().toISOString().split('T')[0],
-        status:        'قيد المراجعة'
+        status:        student.level_mod_status || 'قيد المراجعة',
       };
     });
 
@@ -1927,8 +1904,8 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
       name:        student.name,
       national_id: student.national_id,
       card_year:   cardYear,
-      status:      'لم يُطبع',
-      delivery:    'لم يستلم'
+      status:   student.id_card_status || 'لم يُطبع',
+      delivery: 'لم يستلم'
     }));
 
     return {
@@ -1939,22 +1916,14 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
 
   if (pageId === 'sys_edit') {
     const settings = await systemSettingsApi.list();
-    const rows = (settings as any[]).length > 0
-      ? (settings as any[]).map((setting: any) => ({
-          id: setting.id || '-',
-          name: setting.name || setting.key || '-',
-          value: setting.value || '-',
-          description: setting.description || '-',
-          category: setting.category || 'عام',
-          status: (setting.is_active === true || setting.status === 'Active' || setting.status === 'نشط') ? 'نشط' : 'غير نشط',
-        }))
-      : [
-          { id: '1', name: 'الحد الأدنى للمعدل', value: '2.0', description: 'الحد الأدنى للمعدل التراكمي', category: 'أكاديمي', status: 'نشط' },
-          { id: '2', name: 'حد الإنذار الأول', value: '2.5', description: 'الحد الأدنى قبل الإنذار الأول', category: 'أكاديمي', status: 'نشط' },
-          { id: '3', name: 'حد الإنذار الثاني', value: '1.5', description: 'الحد الأدنى قبل الإنذار الثاني', category: 'أكاديمي', status: 'نشط' },
-          { id: '4', name: 'سعر الساعة المعتمدة', value: '1500', description: 'تكلفة الساعة المعتمدة بالجنيه', category: 'مالي', status: 'نشط' },
-          { id: '5', name: 'فترة التسجيل', value: '14 يوم', description: 'عدد أيام فترة التسجيل', category: 'إداري', status: 'نشط' },
-        ];
+    const rows = (settings as any[]).map((setting: any) => ({
+      id: setting.id || '-',
+      name: setting.name || '-',
+      value: setting.value || '-',
+      description: setting.description || '-',
+      category: setting.category || 'عام',
+      status: (setting.status === 'Active' || setting.status === 'نشط') ? 'نشط' : 'غير نشط',
+    }));
 
     return {
       columns: ['id', 'name', 'value', 'description', 'category', 'status'],
@@ -1963,9 +1932,15 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
   }
 
   if (pageId === 'default') {
+    const announcements = await announcementsApi.list({ faculty_id: facultyId });
     return {
       columns: ['msg', 'date', 'status'],
-      rows: [{ id: 0, msg: 'الإعلانات قادمة قريباً - جاري إعداد واجهة البرنامج.', date: '', status: 'قريباً' }],
+      rows: (announcements as any[]).map((a: any) => ({
+        id: a.id,
+        msg: a.body || a.title || '-',
+        date: a.created_at ? a.created_at.toString().split('T')[0] : '',
+        status: a.is_active ? 'نشط' : 'غير نشط',
+      })),
     };
   }
 

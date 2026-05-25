@@ -90,3 +90,23 @@ def update_setting(
         pass
 
     return setting
+
+
+@router.delete("/{setting_id}", status_code=204)
+def delete_setting(
+    setting_id: str,
+    db: Session = Depends(get_db),
+    scoped_faculty_id: str = Depends(get_scoped_faculty_id),
+    user: models.User = Depends(get_current_user)
+):
+    query = db.query(models.SystemSetting).filter(models.SystemSetting.id == setting_id)
+    if scoped_faculty_id:
+        query = query.filter(
+            (models.SystemSetting.faculty_id == scoped_faculty_id) |
+            (models.SystemSetting.faculty_id == None)
+        )
+    setting = query.first()
+    if not setting:
+        raise HTTPException(status_code=404, detail="Setting not found")
+    db.delete(setting)
+    db.commit()

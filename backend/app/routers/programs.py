@@ -24,12 +24,18 @@ def list_programs(
     programs = q.all()
     return [
         {
-            'id': p.id,
-            'faculty_id': p.faculty_id,
-            'name': p.name,
-            'degree_level': p.degree,
-            'duration_years': p.total_hours,
-            'description': p.name,
+            'id':                    p.id,
+            'name':                  p.name,
+            'name_en':               p.name_en,
+            'code':                  p.code,
+            'faculty_id':            p.faculty_id,
+            'department_id':         p.department_id,
+            'degree':                p.degree,
+            'total_hours':           p.total_hours,
+            'mandatory_hours':       p.mandatory_hours,
+            'elective_hours':        p.elective_hours,
+            'university_requirements': p.university_requirements,
+            'tracks':                p.tracks,
         }
         for p in programs
     ]

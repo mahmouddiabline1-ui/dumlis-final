@@ -30,6 +30,7 @@ import {
   departmentsApi,
   programsApi,
   academicRulesApi,
+  studentProfileApi,
 } from '../api';
 
 interface DynamicPageProps {
@@ -296,6 +297,19 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
         manage_departments: (data: any) => departmentsApi.create(data),
         program_data: (data: any) => programsApi.create(data),
         program_rules: (data: any) => academicRulesApi.create(data),
+        student_attendance: attendanceApi.create,
+        detailed_attendance: attendanceApi.create,
+        fees_report: financialApi.create,
+        student_fees: financialApi.create,
+        student_grades: gradesApi.create,
+        student_enrollments: enrollmentsApi.create,
+        military_edu: (data: any) => studentProfileApi.update(data.student_id, {
+          mil_edu_status: data.military_status,
+          mil_edu_completion: data.completion_date || null,
+          mil_edu_notes: data.notes || '',
+        }),
+        contact_list: studentsApi.create,
+        id_cards: studentsApi.create,
       } as Record<string, (data: any) => Promise<any>>,
       update: {
         course_close: (id: any, data: any) => courseClosuresApi.update(id, data),
@@ -332,12 +346,59 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
         fees_collect: (id: any, data: any) => financialApi.update(id, data),
         payment_perm: (id: any, data: any) => financialApi.update(id, data),
         manage_departments: (id: any, data: any) => departmentsApi.update(id, data),
+        view_departments: (id: any, data: any) => departmentsApi.update(id, data),
         program_data: (id: any, data: any) => programsApi.update(id, data),
         program_rules: (id: any, data: any) => academicRulesApi.update(id, data),
-        // ── pages that update student fields directly ──
-        gpa_mod: (id: any, data: any) => studentsApi.update(id, { gpa: parseFloat(data.new_gpa) }),
-        level_mod: (id: any, data: any) => studentsApi.update(id, { level: Number(data.new_level_raw) || Number(data.level) }),
-        grad_year: (id: any, data: any) => studentsApi.update(id, { graduation_year: parseInt(data.graduation_year) }),
+        bylaw_courses: (id: any, data: any) => regulationsApi.update(id, data),
+        course_catalog: (id: any, data: any) => coursesApi.update(id, data),
+        // ── pages that update student fields directly — return shaped response to avoid raw student fields overwriting display fields ──
+        gpa_mod: async (id: any, data: any) => {
+          await studentsApi.update(id, {
+            gpa: parseFloat(data.new_gpa),
+            gpa_mod_status: data.status,
+            gpa_mod_reason: data.reason || '',
+          });
+          const newGpa = parseFloat(data.new_gpa);
+          const oldGpa = parseFloat(data.old_gpa);
+          return {
+            id, student_id: id,
+            student_name: data.student_name,
+            old_gpa: oldGpa.toFixed(2),
+            new_gpa: newGpa.toFixed(2),
+            difference: (newGpa - oldGpa).toFixed(2),
+            reason: data.reason || '',
+            date: data.date,
+            status: data.status || (Math.abs(newGpa - oldGpa) > 0.1 ? 'قيد المراجعة' : 'موافق عليه'),
+          };
+        },
+        level_mod: async (id: any, data: any) => {
+          await studentsApi.update(id, {
+            level: Number(data.new_level_raw) || Number(data.level),
+            level_mod_status: data.status,
+            level_mod_reason: data.reason || '',
+          });
+          return { ...data, id, updated_at: new Date().toISOString() };
+        },
+        military_edu: async (id: any, data: any) => {
+          await studentProfileApi.update(id, {
+            mil_edu_status: data.military_status,
+            mil_edu_completion: data.completion_date || null,
+            mil_edu_notes: data.notes || '',
+          });
+          return { ...data, id, updated_at: new Date().toISOString() };
+        },
+        contact_list: (id: any, data: any) => studentsApi.update(id, data),
+        id_cards: (id: any, data: any) => studentsApi.update(id, data),
+        grad_year: async (id: any, data: any) => {
+          await studentsApi.update(id, { graduation_year: parseInt(data.graduation_year) });
+          return { ...data, id, updated_at: new Date().toISOString() };
+        },
+        student_attendance: (id: any, data: any) => attendanceApi.update(id, data),
+        detailed_attendance: (id: any, data: any) => attendanceApi.update(id, data),
+        fees_report: (id: any, data: any) => financialApi.update(id, data),
+        student_fees: (id: any, data: any) => financialApi.update(id, data),
+        student_grades: (id: any, data: any) => gradesApi.update(id, data),
+        student_enrollments: (id: any, data: any) => enrollmentsApi.update(id, data),
       } as Record<string, (id: any, data: any) => Promise<any>>,
     };
 
@@ -568,7 +629,6 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
           }
           showNotification('تم تحديث السجل بنجاح!', 'success');
           setDataVersion(prev => prev + 1);
-          onSaveSuccess?.();
         }
       }
 
@@ -1053,6 +1113,29 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
                                     financial_records: (id) => financialApi.delete(id),
                                     enrollments: (id) => enrollmentsApi.delete(id),
                                     assign_room: (id) => committeesApi.delete(id),
+                                    // additional pages
+                                    sys_edit: (id) => systemSettingsApi.delete(id),
+                                    fees_setup: (id) => feeSetupApi.delete(id),
+                                    survey_rules: (id) => surveyRulesApi.delete(id),
+                                    contact_list: (id) => studentsApi.delete(id),
+                                    id_cards: (id) => studentsApi.delete(id),
+                                    program_data: (id) => programsApi.delete(id),
+                                    manage_departments: (id) => departmentsApi.delete(id),
+                                    view_departments: (id) => departmentsApi.delete(id),
+                                    fees_collect: (id) => financialApi.delete(id),
+                                    payment_perm: (id) => financialApi.delete(id),
+                                    fees_report: (id) => financialApi.delete(id),
+                                    student_fees: (id) => financialApi.delete(id),
+                                    student_grades: (id) => gradesApi.delete(id),
+                                    student_enrollments: (id) => enrollmentsApi.delete(id),
+                                    student_attendance: (id) => attendanceApi.delete(id),
+                                    detailed_attendance: (id) => attendanceApi.delete(id),
+                                    advanced_student_search: (id) => studentsApi.delete(id),
+                                    department_students: (id) => studentsApi.delete(id),
+                                    student_data_management: (id) => studentsApi.delete(id),
+                                    bylaw_courses: (id) => regulationsApi.delete(id),
+                                    program_rules: (id) => academicRulesApi.delete(id),
+                                    course_catalog: (id) => coursesApi.delete(id),
                                   };
 
                                   const apiDelete = apiMap[config.id];
@@ -1363,6 +1446,8 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
                         block_reg_by_renewal: FORM_OPTIONS.student_reg_status,
                         attendance_log: FORM_OPTIONS.attendance_status,
                         add_attendance: FORM_OPTIONS.attendance_status,
+                        student_attendance: FORM_OPTIONS.attendance_status,
+                        detailed_attendance: FORM_OPTIONS.attendance_status,
                         gpa_mod: ['قيد المراجعة', 'موافق عليه'],
                         financial_records: FORM_OPTIONS.financial_status,
                         fees_collect: FORM_OPTIONS.financial_status,

@@ -202,6 +202,8 @@ class StudentResponse(StudentCreate, OrmBase):
     gpa_mod_reason   : Optional[str] = None
     level_mod_status : Optional[str] = None
     level_mod_reason : Optional[str] = None
+    survey_status    : Optional[str] = None
+    id_card_status   : Optional[str] = None
     created_at       : datetime
     updated_at       : datetime
 
