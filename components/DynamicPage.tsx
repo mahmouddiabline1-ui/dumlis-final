@@ -1439,30 +1439,71 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
                   const getContextualOptions = (colKey: string): string[] => {
                     if (colKey === 'status') {
                       const pageStatusMap: Record<string, string[]> = {
+                        // Student pages → student statuses
+                        student_list: FORM_OPTIONS.student_status,
+                        contact_list: FORM_OPTIONS.student_status,
+                        advanced_student_search: FORM_OPTIONS.student_status,
+                        old_regulation_students: FORM_OPTIONS.student_status,
+                        new_regulation_students: FORM_OPTIONS.student_status,
+                        department_students: FORM_OPTIONS.student_status,
+                        students_by_gpa: FORM_OPTIONS.student_status,
+                        unregistered_students: FORM_OPTIONS.student_status,
+                        academic_warnings: FORM_OPTIONS.student_status,
+                        // ID card pages
+                        id_cards: FORM_OPTIONS.id_card_status,
+                        id_card_view: FORM_OPTIONS.id_card_status,
+                        // Enrollment pages
                         enrollments: FORM_OPTIONS.enrollment_status,
                         academic_reg: FORM_OPTIONS.enrollment_status,
+                        student_course_enrollments: FORM_OPTIONS.enrollment_status,
+                        multiple_courses_reg: FORM_OPTIONS.enrollment_status,
+                        modify_student_courses: FORM_OPTIONS.enrollment_status,
+                        student_enrollments: FORM_OPTIONS.enrollment_status,
+                        // Registration review pages
                         review_student_reg: FORM_OPTIONS.student_reg_status,
                         manage_reg_issues: FORM_OPTIONS.student_reg_status,
                         balance_reg: FORM_OPTIONS.student_reg_status,
                         block_reg_by_renewal: FORM_OPTIONS.student_reg_status,
+                        block_student_reg: FORM_OPTIONS.student_reg_status,
+                        // Attendance pages
                         attendance_log: FORM_OPTIONS.attendance_status,
                         add_attendance: FORM_OPTIONS.attendance_status,
                         student_attendance: FORM_OPTIONS.attendance_status,
                         detailed_attendance: FORM_OPTIONS.attendance_status,
-                        gpa_mod: ['قيد المراجعة', 'موافق عليه'],
+                        // GPA / Level / Grad modification
+                        gpa_mod: ['قيد المراجعة', 'موافق عليه', 'مرفوض'],
+                        level_mod: FORM_OPTIONS.level_mod_status,
+                        grad_year: FORM_OPTIONS.level_mod_status,
+                        // Financial pages
                         financial_records: FORM_OPTIONS.financial_status,
                         fees_collect: FORM_OPTIONS.financial_status,
                         payment_perm: FORM_OPTIONS.financial_status,
+                        fees_report: FORM_OPTIONS.fees_status,
+                        student_fees: FORM_OPTIONS.fees_status,
+                        // Academic structure
                         course_close: FORM_OPTIONS.closure_status,
+                        program_rules: FORM_OPTIONS.program_rule_status,
+                        bylaw_courses: FORM_OPTIONS.active_inactive,
+                        // Schedules
+                        course_schedules: FORM_OPTIONS.schedule_status,
+                        create_sched: FORM_OPTIONS.schedule_status,
+                        // Committee / rooms
                         assign_room: FORM_OPTIONS.committee_status,
+                        add_room_assignment: FORM_OPTIONS.committee_status,
                         comm_def: FORM_OPTIONS.committee_status,
+                        // Admin / system pages
                         sys_edit: FORM_OPTIONS.active_inactive,
                         announcements_page: FORM_OPTIONS.active_inactive,
                         info_board: FORM_OPTIONS.active_inactive,
                         lecturers_staff: FORM_OPTIONS.active_inactive,
+                        lecturers: FORM_OPTIONS.active_inactive,
                         fees_setup: FORM_OPTIONS.active_inactive,
+                        survey_rules: FORM_OPTIONS.active_inactive,
+                        uni_email: FORM_OPTIONS.active_inactive,
+                        // Military education
+                        military_edu: FORM_OPTIONS.military_status,
                       };
-                      return pageStatusMap[config.id] || getFieldOptions(colKey);
+                      return pageStatusMap[config.id] || FORM_OPTIONS.student_status;
                     }
                     return getFieldOptions(colKey);
                   };
@@ -1480,56 +1521,30 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
                   }
 
                   if (useDropdown && fieldOptions.length > 0) {
-                    // Use datalist (searchable autocomplete) for large option sets
-                    if (fieldOptions.length > 20) {
-                      return (
-                        <div key={col.key} className="space-y-2">
-                          <label className="text-sm font-medium text-gray-700 block">{col.label}</label>
-                          <input
-                            list={`dl-${col.key}-${config.id}`}
-                            value={value}
-                            onChange={(e) => setFormData({ ...formData, [col.key]: e.target.value })}
-                            disabled={isReadOnly}
-                            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none transition-shadow disabled:bg-gray-50"
-                            placeholder={`ابدأ الكتابة للبحث في ${col.label}...`}
-                            required={modalType === 'add'}
-                          />
-                          <datalist id={`dl-${col.key}-${config.id}`}>
-                            {fieldOptions.map((opt) => <option key={opt} value={opt} />)}
-                          </datalist>
-                        </div>
-                      );
-                    }
-
+                    // Always use datalist: allows both free-text entry and autocomplete suggestions
                     return (
                       <div key={col.key} className="space-y-2">
                         <label className="text-sm font-medium text-gray-700 block">{col.label}</label>
-                        <select
+                        <input
+                          list={`dl-${col.key}-${config.id}`}
                           value={value}
                           onChange={(e) => {
                             const newFormData = { ...formData, [col.key]: e.target.value };
-
                             // Auto-fill course name when course code is selected
                             if (col.key === 'course_code') {
                               const courseName = FORM_OPTIONS.course_names[e.target.value as keyof typeof FORM_OPTIONS.course_names];
-                              if (courseName) {
-                                newFormData.course_name = courseName;
-                              }
+                              if (courseName) newFormData.course_name = courseName;
                             }
-
                             setFormData(newFormData);
                           }}
                           disabled={isReadOnly}
-                          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none transition-shadow disabled:bg-gray-50 bg-white"
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none transition-shadow disabled:bg-gray-50"
+                          placeholder={`اختر أو اكتب ${col.label}...`}
                           required={modalType === 'add'}
-                        >
-                          <option value="">اختر {col.label}...</option>
-                          {fieldOptions.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
+                        />
+                        <datalist id={`dl-${col.key}-${config.id}`}>
+                          {fieldOptions.map((opt) => <option key={opt} value={opt} />)}
+                        </datalist>
                       </div>
                     );
                   }

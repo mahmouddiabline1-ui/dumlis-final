@@ -2,15 +2,15 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
-  timeout: 30_000,
-  expect: { timeout: 5000 },
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
 
-  // start Vite dev server before tests
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3001',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+  use: {
+    baseURL: 'https://dumlis-final.mahmouddiabline1.workers.dev',
+    headless: true,
+    screenshot: 'only-on-failure',
+    video: 'off',
+    locale: 'ar-EG',
   },
 
   projects: [
