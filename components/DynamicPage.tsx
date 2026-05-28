@@ -58,9 +58,10 @@ const STUDENT_PAGE_IDS = new Set([
 const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, selectedFacultyId, onSaveSuccess }) => {
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm || '');
   const [demoStudents, setDemoStudents] = useState<{ student_id: string; name: string; level: number }[]>([]);
+  const isStudentUser = localStorage.getItem('userRole') === 'student';
 
   useEffect(() => {
-    if (!STUDENT_PAGE_IDS.has(config.id)) return;
+    if (!STUDENT_PAGE_IDS.has(config.id) || isStudentUser) return;
     let cancelled = false;
     (async () => {
       try {
@@ -861,8 +862,8 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
         </div>
       </div>
 
-      {/* Demo Students Quick-Select Strip */}
-      {STUDENT_PAGE_IDS.has(config.id) && demoStudents.length > 0 && (
+      {/* Demo Students Quick-Select Strip (admin-only) */}
+      {STUDENT_PAGE_IDS.has(config.id) && demoStudents.length > 0 && !isStudentUser && (
         <div className="bg-gradient-to-l from-primary-50 to-white rounded-xl border border-primary-100 shadow-sm px-4 py-3 flex flex-wrap items-center gap-3">
           <span className="text-xs font-bold text-primary-700 shrink-0">👨‍🎓 طلاب تجريبيون:</span>
           {demoStudents.map((s) => (

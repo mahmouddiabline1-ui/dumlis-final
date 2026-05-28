@@ -218,6 +218,10 @@ const DbBackedPage: React.FC<DbBackedPageProps> = ({ pageId, title, facultyId, i
 };
 
 async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { id: string }): Promise<TableResult> {
+  const userRole = localStorage.getItem('userRole') || '';
+  const currentStudentId = localStorage.getItem('currentStudentId') || '';
+  const isStudentView = userRole === 'student' && !!currentStudentId;
+
   const mapStudentToUI = (s: any) => {
     // Convert numeric level to string e.g. 1 -> Level 1
     const levels = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس'];
@@ -685,6 +689,24 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
   }
 
   if (pageId === 'attendance_log' || pageId === 'detailed_attendance' || pageId === 'student_attendance') {
+    if (isStudentView) {
+      const [attendance, courses] = await Promise.all([
+        attendanceApi.listAll({ student_id: currentStudentId }),
+        coursesApi.list({ faculty_id: facultyId || undefined }),
+      ]);
+      const courseMap = new Map((courses as any[]).map(c => [c.id, c.name]));
+      const rows = (attendance as any[]).map((a: any) => ({
+        id: a.id,
+        course_id: a.course_id,
+        course_name: courseMap.get(a.course_id) || a.course_id,
+        week: a.week_number ? `الأسبوع ${a.week_number}` : '-',
+        date: a.attendance_date ? new Date(a.attendance_date).toISOString().split('T')[0] : '-',
+        session_type: a.session_type || 'محاضرة',
+        status: a.status || 'حاضر',
+      }));
+      return { columns: ['course_id', 'course_name', 'week', 'date', 'session_type', 'status'], rows };
+    }
+
     const [attendance, courses, students] = await Promise.all([
       attendanceApi.listAll({ faculty_id: facultyId || undefined }),
       coursesApi.list({ faculty_id: facultyId || undefined }),
@@ -720,6 +742,20 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
 
 
   if (pageId === 'financial_records' || pageId === 'fees_report') {
+    if (isStudentView) {
+      const financial = await financialApi.listAll({ student_id: currentStudentId });
+      const rows = (financial as any[]).map(f => ({
+        id: f.id,
+        fee_type: f.fee_type || 'رسوم دراسية',
+        amount: f.amount,
+        paid_amount: f.paid_amount,
+        remaining: (f.amount || 0) - (f.paid_amount || 0),
+        status: f.status || ((f.amount - f.paid_amount) <= 0 ? 'مسدد' : 'غير مسدد'),
+        semester: f.semester || '-',
+      }));
+      return { columns: ['fee_type', 'semester', 'amount', 'paid_amount', 'remaining', 'status'], rows };
+    }
+
     const [financial, students] = await Promise.all([
       financialApi.listAll({ faculty_id: facultyId || undefined }),
       studentsApi.listAll({ faculty_id: facultyId || undefined }),
@@ -1026,13 +1062,32 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
   }
 
   if (pageId === 'student_grades') {
+    if (isStudentView) {
+      const [grades, courses] = await Promise.all([
+        gradesApi.listAll({ student_id: currentStudentId }),
+        coursesApi.list({ faculty_id: facultyId }),
+      ]);
+      const courseMap = new Map((courses as any[]).map((c: any) => [c.id, c]));
+      const rows = (grades as any[]).map((grade) => {
+        const course = courseMap.get(grade.course_id);
+        return {
+          id: grade.id,
+          course_id: grade.course_id,
+          course_name: course?.name || grade.course_id,
+          semester: grade.semester || 'N/A',
+          grade_letter: grade.grade_letter || 'N/A',
+          total: grade.total || 0,
+        };
+      });
+      return { columns: ['semester', 'course_id', 'course_name', 'total', 'grade_letter'], rows };
+    }
+
     const students = await studentsApi.listAll({ faculty_id: facultyId });
     const studentIds = new Set(students.map((s: any) => s.student_id));
     const grades = await gradesApi.listAll({});
     const courses = await coursesApi.list({ faculty_id: facultyId });
     const courseMap = new Map(courses.map((c: any) => [c.id, c]));
 
-    // Filter grades to faculty students
     const rows = (grades as any[])
       .filter((g) => studentIds.has(g.student_id))
       .map((grade) => {
@@ -1056,13 +1111,31 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
   }
 
   if (pageId === 'student_enrollments') {
+    if (isStudentView) {
+      const [enrollments, courses] = await Promise.all([
+        enrollmentsApi.listAll({ student_id: currentStudentId }),
+        coursesApi.list({ faculty_id: facultyId }),
+      ]);
+      const courseMap = new Map((courses as any[]).map((c: any) => [c.id, c]));
+      const rows = (enrollments as any[]).map((e) => {
+        const course = courseMap.get(e.course_id);
+        return {
+          id: e.id,
+          course_id: e.course_id,
+          course_name: course?.name || e.course_id,
+          semester: e.semester || 'N/A',
+          status: e.status || 'مسجل',
+        };
+      });
+      return { columns: ['course_id', 'course_name', 'semester', 'status'], rows };
+    }
+
     const students = await studentsApi.listAll({ faculty_id: facultyId });
     const studentIds = new Set(students.map((s: any) => s.student_id));
     const enrollments = await enrollmentsApi.listAll({});
     const courses = await coursesApi.list({ faculty_id: facultyId });
     const courseMap = new Map(courses.map((c: any) => [c.id, c]));
 
-    // Filter enrollments to faculty students
     const rows = (enrollments as any[])
       .filter((e) => studentIds.has(e.student_id))
       .map((enrollment) => {
@@ -1241,7 +1314,7 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
   }
 
   if (pageId === 'student_fees') {
-    const financial = await financialApi.listAll({ faculty_id: facultyId });
+    const financial = await financialApi.listAll(isStudentView ? { student_id: currentStudentId } : { faculty_id: facultyId });
 
     const feesByType = new Map<string, { amount: number; paid: number; remaining: number; count: number }>();
     (financial as any[]).forEach((record: any) => {
