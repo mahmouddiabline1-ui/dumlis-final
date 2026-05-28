@@ -161,7 +161,7 @@ const ContentArea: React.FC<ContentAreaProps> = ({ activeSubItemId, activeTabLab
     const dbPageConfig = getPageConfig(activeSubItemId, selectedFacultyId);
     return (
       <div className="p-6 md:p-8 animate-fade-in w-full max-w-full h-full">
-        <DbBackedPage pageId={activeSubItemId} title={dbPageConfig.title} facultyId={selectedFacultyId} />
+        <DbBackedPage pageId={activeSubItemId} title={dbPageConfig.title} facultyId={selectedFacultyId} initialSearchTerm={globalSearchTerm} />
       </div>
     );
   }

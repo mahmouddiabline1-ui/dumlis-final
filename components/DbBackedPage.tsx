@@ -30,6 +30,7 @@ interface DbBackedPageProps {
   pageId: string;
   title: string;
   facultyId?: string | null;
+  initialSearchTerm?: string;
 }
 
 type TableResult = {
@@ -146,7 +147,7 @@ const DB_BACKED_IDS = new Set([
 
 export const isDbBackedPage = (pageId: string) => DB_BACKED_IDS.has(pageId);
 
-const DbBackedPage: React.FC<DbBackedPageProps> = ({ pageId, title, facultyId }) => {
+const DbBackedPage: React.FC<DbBackedPageProps> = ({ pageId, title, facultyId, initialSearchTerm }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -211,7 +212,7 @@ const DbBackedPage: React.FC<DbBackedPageProps> = ({ pageId, title, facultyId })
 
   return (
     <div className="h-full w-full">
-      <DynamicPage config={combinedConfig as any} selectedFacultyId={facultyId} onSaveSuccess={() => setSaveVersion(v => v + 1)} />
+      <DynamicPage config={combinedConfig as any} selectedFacultyId={facultyId} initialSearchTerm={initialSearchTerm} onSaveSuccess={() => setSaveVersion(v => v + 1)} />
     </div>
   );
 };

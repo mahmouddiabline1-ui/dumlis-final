@@ -47,7 +47,30 @@ function App() {
   const [globalSearchTerm, setGlobalSearchTerm] = useState('');
   const [searchSource, setSearchSource] = useState<string>('all'); // 'all', 'students', 'courses', 'programs', 'decisions', 'departments'
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const searchDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Flat list of all navigable pages for autocomplete
+  const searchablePages = React.useMemo(() =>
+    ADMIN_NAVIGATION.flatMap(tab =>
+      tab.groups.flatMap(group =>
+        group.items.map(item => ({
+          id: item.id,
+          label: item.label,
+          tabId: tab.id,
+          tabLabel: tab.label,
+        }))
+      )
+    ), []);
+
+  // Live suggestions filtered by what the user typed
+  const liveSuggestions = React.useMemo(() => {
+    if (!globalSearchTerm.trim() || globalSearchTerm.length < 1) return [];
+    const term = globalSearchTerm.trim().toLowerCase();
+    return searchablePages.filter(p =>
+      p.label.toLowerCase().includes(term) || p.id.toLowerCase().includes(term)
+    ).slice(0, 8);
+  }, [globalSearchTerm, searchablePages]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -209,8 +232,21 @@ function App() {
   // Global Search Handler
   const handleGlobalSearch = (searchTerm: string) => {
     if (!searchTerm.trim()) return;
+    setShowSuggestions(false);
+    setShowSearchDropdown(false);
 
-    // Navigate based on selected search source
+    // If there's a matching page, navigate there directly
+    const term = searchTerm.trim().toLowerCase();
+    const match = searchablePages.find(p =>
+      p.label.toLowerCase().includes(term) || p.id.toLowerCase() === term
+    );
+    if (match) {
+      setActiveTabId(match.tabId);
+      setActiveSubItemId(match.id);
+      return;
+    }
+
+    // Fallback: navigate by source category
     switch (searchSource) {
       case 'students':
         setActiveTabId('students');
@@ -228,17 +264,10 @@ function App() {
         setActiveTabId('departments');
         setActiveSubItemId('view_departments');
         break;
-      case 'decisions':
-        setActiveTabId('decisions');
-        setActiveSubItemId('decision_list');
-        break;
       default:
-        // 'all' - search in students by default
         setActiveTabId('students');
         setActiveSubItemId('advanced_student_search');
     }
-
-    setShowSearchDropdown(false);
   };
 
   // Search sources configuration
@@ -494,16 +523,18 @@ function App() {
                 <input
                   type="text"
                   value={globalSearchTerm}
-                  onChange={(e) => setGlobalSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setGlobalSearchTerm(e.target.value);
+                    setShowSuggestions(e.target.value.length > 0);
+                    setShowSearchDropdown(false);
+                  }}
                   onKeyDown={handleSearchKeyPress}
-                  onFocus={() => setShowSearchDropdown(false)}
-                  placeholder={
-                    currentUser?.role === 'student' 
-                      ? "بحث في الخدمات..." 
-                      : searchSource === 'all'
-                      ? "بحث في الكل..."
-                      : `بحث في ${searchSources.find(s => s.id === searchSource)?.label}...`
-                  }
+                  onFocus={() => {
+                    setShowSearchDropdown(false);
+                    if (globalSearchTerm.length > 0) setShowSuggestions(true);
+                  }}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  placeholder="ابحث عن صفحة، طالب، مقرر..."
                   className="w-full bg-primary-800/50 border border-primary-700 text-primary-100 text-sm rounded-full pl-4 pr-24 py-2 focus:outline-none focus:bg-primary-800 focus:border-gold-500/50 transition-all placeholder:text-primary-400"
                 />
                 <button
@@ -512,6 +543,29 @@ function App() {
                 >
                   <Search className="w-4 h-4" />
                 </button>
+
+                {/* Live Suggestions Dropdown */}
+                {showSuggestions && liveSuggestions.length > 0 && (
+                  <div className="absolute top-full mt-2 right-0 w-full bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
+                    {liveSuggestions.map((page) => (
+                      <button
+                        key={`${page.tabId}-${page.id}`}
+                        onMouseDown={() => {
+                          setActiveTabId(page.tabId);
+                          setActiveSubItemId(page.id);
+                          setShowSuggestions(false);
+                        }}
+                        className="w-full px-4 py-2.5 text-right flex items-center justify-between gap-3 hover:bg-primary-50 transition-colors border-b border-gray-100 last:border-0"
+                      >
+                        <div className="flex flex-col items-start">
+                          <span className="text-sm font-medium text-gray-900">{page.label}</span>
+                          <span className="text-[10px] text-gray-400">{page.tabLabel}</span>
+                        </div>
+                        <Search className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
