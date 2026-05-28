@@ -617,13 +617,23 @@ function App() {
                 </div>
               )}
 
-              <button
-                onClick={handleLogout}
-                className="p-2 text-primary-200 hover:text-red-400 hover:bg-primary-800 rounded-full transition-colors"
-                title="تسجيل خروج"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
+              {currentUser?.role === 'student' ? (
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 bg-red-500/20 hover:bg-red-500/40 text-red-200 hover:text-white border border-red-400/40 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>خروج</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleLogout}
+                  className="p-2 text-primary-200 hover:text-red-400 hover:bg-primary-800 rounded-full transition-colors"
+                  title="تسجيل خروج"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
+              )}
 
               <button className="p-2 text-primary-200 hover:text-white hover:bg-primary-800 rounded-full transition-colors relative">
                 <Bell className="w-5 h-5" />
