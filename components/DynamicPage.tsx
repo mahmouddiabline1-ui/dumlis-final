@@ -41,8 +41,45 @@ interface DynamicPageProps {
   onSaveSuccess?: () => void;
 }
 
+const STUDENT_PAGE_IDS = new Set([
+  'student_list', 'advanced_student_search', 'department_students', 'old_regulation_students',
+  'new_regulation_students', 'contact_list', 'id_cards', 'id_card_view', 'students_by_gpa',
+  'academic_warnings', 'student_academic_profile', 'student_complete_profile', 'student_performance_analysis',
+  'student_grades', 'student_enrollments', 'student_course_enrollments', 'detailed_grades',
+  'attendance_log', 'detailed_attendance', 'student_attendance',
+  'financial_records', 'fees_collect', 'payment_perm', 'fees_report', 'student_fees',
+  'gpa_mod', 'level_mod', 'grad_year',
+  'multiple_courses_reg', 'review_student_reg', 'student_reg_form', 'modify_student_courses',
+  'registered_students_report', 'registered_students_chart', 'registered_students_stats', 'registered_by_levels',
+  'regulation_statistics', 'course_enrollment_statistics', 'course_performance_analysis',
+  'database_relations_overview', 'course_schedules', 'military_edu', 'uni_email',
+]);
+
 const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, selectedFacultyId, onSaveSuccess }) => {
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm || '');
+  const [demoStudents, setDemoStudents] = useState<{ student_id: string; name: string; level: number }[]>([]);
+
+  useEffect(() => {
+    if (!STUDENT_PAGE_IDS.has(config.id)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const results = await Promise.all(
+          [1, 2, 3, 4].map(level =>
+            studentsApi.list({ faculty_id: selectedFacultyId || undefined, level, limit: 1 })
+          )
+        );
+        if (!cancelled) {
+          const students = results
+            .map((r: any[]) => r[0])
+            .filter(Boolean)
+            .map((s: any) => ({ student_id: s.student_id, name: s.name, level: Number(s.level) }));
+          setDemoStudents(students);
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [config.id, selectedFacultyId]);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState<string>('');
   const [editingRow, setEditingRow] = useState<any>(null);
@@ -823,6 +860,35 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
           ))}
         </div>
       </div>
+
+      {/* Demo Students Quick-Select Strip */}
+      {STUDENT_PAGE_IDS.has(config.id) && demoStudents.length > 0 && (
+        <div className="bg-gradient-to-l from-primary-50 to-white rounded-xl border border-primary-100 shadow-sm px-4 py-3 flex flex-wrap items-center gap-3">
+          <span className="text-xs font-bold text-primary-700 shrink-0">👨‍🎓 طلاب تجريبيون:</span>
+          {demoStudents.map((s) => (
+            <button
+              key={s.student_id}
+              onClick={() => setSearchTerm(prev => prev === s.student_id ? '' : s.student_id)}
+              title={`${s.student_id} — ${s.name}`}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all border shadow-sm ${
+                searchTerm === s.student_id
+                  ? 'bg-primary-700 text-white border-primary-700'
+                  : 'bg-white text-primary-800 border-primary-200 hover:bg-primary-50 hover:border-primary-400'
+              }`}
+            >
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${
+                searchTerm === s.student_id ? 'bg-white/20 text-white' : 'bg-primary-100 text-primary-700'
+              }`}>
+                {s.name.charAt(0)}
+              </span>
+              <span>{s.name}</span>
+              <span className={`rounded px-1 py-0.5 text-[9px] ${
+                searchTerm === s.student_id ? 'bg-primary-600 text-primary-100' : 'bg-gray-100 text-gray-500'
+              }`}>م{s.level}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[500px] flex flex-col">

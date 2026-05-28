@@ -28,6 +28,21 @@ const StudentRegistrationManagement: React.FC<StudentRegistrationManagementProps
     const [suggestions, setSuggestions] = useState<any[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [courseLevel, setCourseLevel] = useState<number | 'all'>('all');
+    const [demoStudents, setDemoStudents] = useState<any[]>([]);
+
+    // Fetch 4 demo students (one per level) on mount
+    useEffect(() => {
+        (async () => {
+            try {
+                const results = await Promise.all(
+                    [1, 2, 3, 4].map(level =>
+                        studentsApi.list({ faculty_id: selectedFacultyId || undefined, level, limit: 1 })
+                    )
+                );
+                setDemoStudents(results.map((r: any[]) => r[0]).filter(Boolean));
+            } catch {}
+        })();
+    }, [selectedFacultyId]);
 
     // Load academic rules on component mount or when faculty changes
     useEffect(() => {
@@ -462,9 +477,35 @@ const StudentRegistrationManagement: React.FC<StudentRegistrationManagementProps
                             </div>
                         </div>
                     ) : (
-                        <div className="text-center py-10 opacity-50">
-                            <ArrowRight className="mx-auto mb-2 text-gray-400" size={32} />
-                            <p className="text-gray-500 text-sm">قم بالبحث عن طالب للبدء في التسجيل</p>
+                        <div className="space-y-3">
+                            <p className="text-xs text-gray-400 text-center font-medium">اختر طالباً للبدء في التسجيل</p>
+                            {demoStudents.length > 0 ? demoStudents.map((s: any) => (
+                                <button
+                                    key={s.student_id}
+                                    onClick={async () => {
+                                        setSelectedStudent(s);
+                                        await loadStudentData(s);
+                                    }}
+                                    className="w-full flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-200 hover:border-primary-400 hover:bg-primary-50 transition-all shadow-sm text-right group"
+                                >
+                                    <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-base shrink-0 group-hover:bg-primary-200">
+                                        {s.name.charAt(0)}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="font-bold text-sm text-gray-900 truncate">{s.name}</div>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <span className="text-[10px] font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">{s.student_id}</span>
+                                            <span className="text-[10px] text-gray-400">المستوى {s.level}</span>
+                                        </div>
+                                    </div>
+                                    <ArrowRight size={14} className="text-gray-300 group-hover:text-primary-500 shrink-0" />
+                                </button>
+                            )) : (
+                                <div className="text-center py-6 opacity-50">
+                                    <ArrowRight className="mx-auto mb-2 text-gray-400" size={28} />
+                                    <p className="text-gray-500 text-xs">قم بالبحث عن طالب للبدء</p>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
