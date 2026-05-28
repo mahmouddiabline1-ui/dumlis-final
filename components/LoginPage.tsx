@@ -327,6 +327,42 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                   ))}
                 </div>
               </div>
+
+              {/* Demo Students Grid */}
+              <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100">
+                <p className="text-[10px] text-blue-400 mb-2 text-center uppercase tracking-wider font-bold">👨‍🎓 طلاب تجريبيون (جميعهم: test1234)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: '2024002', name: 'أحمد إبراهيم', level: 'الأول' },
+                    { id: '2024033', name: 'إبراهيم حسين', level: 'الثاني' },
+                    { id: '2024035', name: 'نور عبدالله', level: 'الثالث' },
+                    { id: '2024034', name: 'مريم خالد', level: 'الرابع' },
+                  ].map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setUsername(s.id);
+                        setPassword('test1234');
+                        setTimeout(() => {
+                          setUsername(s.id);
+                          setPassword('test1234');
+                          document.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true }));
+                        }, 50);
+                      }}
+                      className="bg-white hover:bg-blue-50 px-2 py-2 rounded-lg text-xs transition-all cursor-pointer border border-blue-100 hover:border-blue-300 shadow-sm flex items-center gap-2 group"
+                    >
+                      <div className="w-7 h-7 rounded-full bg-blue-100 group-hover:bg-blue-200 flex items-center justify-center text-blue-700 font-bold text-sm shrink-0">
+                        {s.name.charAt(0)}
+                      </div>
+                      <div className="text-right overflow-hidden">
+                        <div className="font-medium text-gray-800 text-[10px] truncate">{s.name}</div>
+                        <div className="text-[9px] text-blue-500">المستوى {s.level} · {s.id}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
             </>

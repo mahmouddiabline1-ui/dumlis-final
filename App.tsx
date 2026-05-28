@@ -47,7 +47,7 @@ function App() {
   const [globalSearchTerm, setGlobalSearchTerm] = useState('');
   const [searchSource, setSearchSource] = useState<string>('all'); // 'all', 'students', 'courses', 'programs', 'decisions', 'departments'
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
   const searchDropdownRef = useRef<HTMLDivElement>(null);
 
   // Flat list of all navigable pages for autocomplete
@@ -232,7 +232,7 @@ function App() {
   // Global Search Handler
   const handleGlobalSearch = (searchTerm: string) => {
     if (!searchTerm.trim()) return;
-    setShowSuggestions(false);
+    setSearchFocused(false);
     setShowSearchDropdown(false);
 
     // If there's a matching page, navigate there directly
@@ -525,15 +525,14 @@ function App() {
                   value={globalSearchTerm}
                   onChange={(e) => {
                     setGlobalSearchTerm(e.target.value);
-                    setShowSuggestions(e.target.value.length > 0);
                     setShowSearchDropdown(false);
                   }}
                   onKeyDown={handleSearchKeyPress}
                   onFocus={() => {
                     setShowSearchDropdown(false);
-                    if (globalSearchTerm.length > 0) setShowSuggestions(true);
+                    setSearchFocused(true);
                   }}
-                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
                   placeholder="ابحث عن صفحة، طالب، مقرر..."
                   className="w-full bg-primary-800/50 border border-primary-700 text-primary-100 text-sm rounded-full pl-4 pr-24 py-2 focus:outline-none focus:bg-primary-800 focus:border-gold-500/50 transition-all placeholder:text-primary-400"
                 />
@@ -545,7 +544,7 @@ function App() {
                 </button>
 
                 {/* Live Suggestions Dropdown */}
-                {showSuggestions && liveSuggestions.length > 0 && (
+                {searchFocused && liveSuggestions.length > 0 && (
                   <div className="absolute top-full mt-2 right-0 w-full bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
                     {liveSuggestions.map((page) => (
                       <button
@@ -553,7 +552,7 @@ function App() {
                         onMouseDown={() => {
                           setActiveTabId(page.tabId);
                           setActiveSubItemId(page.id);
-                          setShowSuggestions(false);
+                          setSearchFocused(false);
                         }}
                         className="w-full px-4 py-2.5 text-right flex items-center justify-between gap-3 hover:bg-primary-50 transition-colors border-b border-gray-100 last:border-0"
                       >
