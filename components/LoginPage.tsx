@@ -266,33 +266,32 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 <button
                   type="button"
                   onClick={async () => {
-                    setUsername('1001');
+                    setUsername('2024006');
                     setPassword('test1234');
-                    // Auto-login
                     setTimeout(() => {
-                      setUsername('1001');
+                      setUsername('2024006');
                       setPassword('test1234');
                       document.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true }));
                     }, 50);
                   }}
                   className="bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer border border-blue-200 hover:bg-blue-100 hover:shadow-md shadow-sm"
                 >
-                  👨‍🎓 طالب<br/><span className="text-[9px]">1001 / test1234</span>
+                  👨‍🎓 طالب<br/><span className="text-[9px]">2024006 / test1234</span>
                 </button>
                 <button
                   type="button"
                   onClick={async () => {
                     setUsername('admin_fcai');
-                    setPassword('test1234');
+                    setPassword('admin');
                     setTimeout(() => {
                       setUsername('admin_fcai');
-                      setPassword('test1234');
+                      setPassword('admin');
                       document.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true }));
                     }, 50);
                   }}
                   className="bg-green-50 text-green-700 px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer border border-green-200 hover:bg-green-100 hover:shadow-md shadow-sm"
                 >
-                  👨‍💼 مسؤول كلية<br/><span className="text-[9px]">admin_fcai / test1234</span>
+                  👨‍💼 مسؤول كلية<br/><span className="text-[9px]">admin_fcai / admin</span>
                 </button>
                 <button
                   type="button"
@@ -309,24 +308,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 >
                   👑 مسؤول النظام<br/><span className="text-[9px]">super_admin / test1234</span>
                 </button>
-                <button 
-                  type="button"
-                  onClick={() => { setUsername('student'); setPassword('student'); }}
-                  className="bg-green-50 text-green-700 px-3 py-1.5 rounded-full text-[10px] transition-colors cursor-pointer border border-green-100 hover:bg-green-100 shadow-sm"
-                >
-                  طالب: student / student
-                </button>
               </div>
 
               {/* Faculty Admins Grid */}
               <div className="bg-gray-50/50 p-3 rounded-xl border border-gray-100">
-                <p className="text-[10px] text-gray-400 mb-2 text-center uppercase tracking-wider font-bold">أدمن الكليات (admin / admin)</p>
+                <p className="text-[10px] text-gray-400 mb-2 text-center uppercase tracking-wider font-bold">أدمن الكليات (FCAI: admin | الباقي: test1234)</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                   {FACULTIES.map(faculty => (
-                    <button 
+                    <button
                       key={faculty.id}
                       type="button"
-                      onClick={() => { setUsername(`admin_${faculty.id.toLowerCase()}`); setPassword('admin'); }}
+                      onClick={() => { setUsername(`admin_${faculty.id.toLowerCase()}`); setPassword(faculty.id === 'FCAI' ? 'admin' : 'test1234'); }}
                       className="bg-white hover:bg-primary-50 hover:text-primary-700 px-2 py-1.5 rounded-lg text-[9px] transition-all cursor-pointer border border-gray-200 hover:border-primary-200 shadow-sm flex items-center justify-center gap-1 group"
                     >
                       <span className="opacity-70 group-hover:opacity-100">{faculty.icon}</span>

@@ -165,7 +165,7 @@ def get_student_statistics(
             {"name": "مسدد", "value": fees_stats.get("مسدد", 0)},
             {"name": "غير مسدد", "value": fees_stats.get("غير مسدد", 0)},
         ],
-        "activeStudents": status_stats.get("مقيد", 0),
+        "activeStudents": sum(status_stats.get(s, 0) for s in ["مقيد", "نشط", "مستجد", "منقول"]),
         "graduatedStudents": status_stats.get("خريج", 0),
         "suspendedStudents": status_stats.get("موقوف", 0),
         "expelledStudents": status_stats.get("مفصول", 0),
