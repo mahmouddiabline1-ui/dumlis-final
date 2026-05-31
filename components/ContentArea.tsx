@@ -17,6 +17,7 @@ import { getPageConfig } from '../data/pageConfig';
 import { UserRole } from '../types';
 import DbBackedPage, { isDbBackedPage } from './DbBackedPage';
 import DbAttendanceEntry from './DbAttendanceEntry';
+import StudentInfoBoard from './StudentInfoBoard';
 
 interface ContentAreaProps {
   activeSubItemId: string | null;
@@ -144,8 +145,31 @@ const ContentArea: React.FC<ContentAreaProps> = ({ activeSubItemId, activeTabLab
     );
   }
 
-  // نفس محتوى لوحة المعلومات الرئيسية (لا جدول وهمي فارغ)
+  // Student back navigation bar — shown on every student inner page
+  const StudentBackBar = role === 'student' ? (
+    <div className="sticky top-0 z-20 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-2 text-sm shadow-sm">
+      <button
+        onClick={() => onNavigate('')}
+        className="flex items-center gap-1.5 text-primary-700 hover:text-primary-900 font-medium transition-colors"
+      >
+        <span className="text-base">→</span>
+        الرئيسية
+      </button>
+      <span className="text-gray-300">/</span>
+      <span className="text-gray-600 font-medium">{getPageConfig(activeSubItemId, selectedFacultyId).title}</span>
+    </div>
+  ) : null;
+
+  // لوحة المعلومات — admin sees analytics dashboard, students see announcements board
   if (activeSubItemId === 'info_board') {
+    if (role === 'student') {
+      return (
+        <div className="animate-fade-in">
+          {StudentBackBar}
+          <StudentInfoBoard />
+        </div>
+      );
+    }
     return (
       <div className="p-8 animate-fade-in">
         <div className="mb-8 border-b border-gray-100 pb-6">
@@ -160,8 +184,11 @@ const ContentArea: React.FC<ContentAreaProps> = ({ activeSubItemId, activeTabLab
   if (isDbBackedPage(activeSubItemId)) {
     const dbPageConfig = getPageConfig(activeSubItemId, selectedFacultyId);
     return (
-      <div className="p-6 md:p-8 animate-fade-in w-full max-w-full h-full">
-        <DbBackedPage pageId={activeSubItemId} title={dbPageConfig.title} facultyId={selectedFacultyId} initialSearchTerm={globalSearchTerm} />
+      <div className="animate-fade-in w-full max-w-full h-full">
+        {StudentBackBar}
+        <div className="p-6 md:p-8">
+          <DbBackedPage pageId={activeSubItemId} title={dbPageConfig.title} facultyId={selectedFacultyId} initialSearchTerm={globalSearchTerm} />
+        </div>
       </div>
     );
   }

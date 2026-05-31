@@ -130,6 +130,14 @@ def login(
         student = db.query(models.Student).filter(models.Student.user_id == user.id).first()
         if student:
             student_id = student.student_id
+        else:
+            # Fallback: username may BE the student_id (common pattern for student accounts)
+            fallback = db.query(models.Student).filter(models.Student.student_id == user.username).first()
+            if fallback:
+                student_id = fallback.student_id
+                # Link the user to the student so future logins are faster
+                fallback.user_id = user.id
+                db.commit()
 
     return {
         "access_token": token,

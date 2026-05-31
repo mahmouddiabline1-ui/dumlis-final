@@ -205,22 +205,33 @@ const DbBackedPage: React.FC<DbBackedPageProps> = ({ pageId, title, facultyId, i
 
   // Get structure and UI metadata using getPageConfig
   const mockConfig = getPageConfig(pageId, facultyId);
+  const userRole = typeof localStorage !== 'undefined' ? localStorage.getItem('userRole') || '' : '';
+  const isStudent = userRole === 'student';
 
   // Combine DB data with mock structure
   const baseDescription = mockConfig.description.split('(')[0].trim();
   const displayFaculty = facultyId === 'FCAI' ? 'كلية الحاسبات والذكاء الاصطناعي' : facultyId || '';
-  const finalDescription = facultyId 
-    ? `${baseDescription} (${result.rows.length} سجل - ${displayFaculty})`
-    : `${baseDescription} (${result.rows.length} سجل)`;
+  // Students see only their count with no faculty label
+  const finalDescription = isStudent
+    ? `${baseDescription} (${result.rows.length} سجل)`
+    : facultyId
+      ? `${baseDescription} (${result.rows.length} سجل - ${displayFaculty})`
+      : `${baseDescription} (${result.rows.length} سجل)`;
+
+  // Students get read-only view — strip add/edit/delete actions
+  const studentSafeActions = isStudent
+    ? (mockConfig.actions || []).filter((a: any) => !['add', 'edit', 'delete'].includes(a.type))
+    : mockConfig.actions;
 
   const combinedConfig = {
     ...mockConfig,
     id: pageId,
     title: title,
     description: finalDescription,
+    actions: studentSafeActions,
     // Provide fallback column definitions if mockConfig doesn't have them
-    columns: mockConfig.columns?.length 
-      ? mockConfig.columns 
+    columns: mockConfig.columns?.length
+      ? mockConfig.columns
       : result.columns.map(c => ({ key: c, label: c, type: 'text' as const })),
     data: result.rows,
   };

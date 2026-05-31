@@ -34,8 +34,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       // Persist auth data
       localStorage.setItem('authToken', resp.access_token);
       localStorage.setItem('userRole', resp.user_role);
-      if (resp.student_id) {
-        localStorage.setItem('currentStudentId', resp.student_id);
+      // For students, student_id may come from the response or be the username itself
+      const effectiveStudentId = resp.student_id || (resp.user_role === 'student' ? resp.username : null);
+      if (effectiveStudentId) {
+        localStorage.setItem('currentStudentId', effectiveStudentId);
+        localStorage.setItem('userStudentId', effectiveStudentId);
       }
       // Build landing based on role
       const landing =
