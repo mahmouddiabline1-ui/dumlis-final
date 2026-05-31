@@ -302,6 +302,29 @@ export const MOCK_DATABASE: Record<string, PageConfig> = {
     ]
   },
 
+  'fees_report': {
+    id: 'fees_report',
+    title: 'تقارير بيانات مالية',
+    description: 'تقارير تفصيلية للرسوم والمدفوعات لجميع الطلاب',
+    type: 'table',
+    columns: [
+      { key: 'student_id', label: 'كود الطالب' },
+      { key: 'name', label: 'اسم الطالب' },
+      { key: 'fee_type', label: 'نوع الرسوم' },
+      { key: 'amount', label: 'المبلغ المستحق', type: 'currency' },
+      { key: 'paid_amount', label: 'المبلغ المدفوع', type: 'currency' },
+      { key: 'remaining', label: 'المتبقي', type: 'currency' },
+      { key: 'status', label: 'الحالة', type: 'status' },
+      { key: 'due_date', label: 'تاريخ الاستحقاق', type: 'date' },
+      { key: 'semester', label: 'الفصل الدراسي' }
+    ],
+    data: [],
+    actions: [
+      { type: 'export', label: 'تصدير Excel' },
+      { type: 'print', label: 'طباعة' }
+    ]
+  },
+
   // ==================================================================================
   // ANALYTICAL REPORTS WITH RELATIONS
   // ==================================================================================
