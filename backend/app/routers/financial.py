@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -7,6 +8,7 @@ from app import models, schemas
 from app.routers.auth import get_scoped_faculty_id, get_current_user
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.get("/")
 def list_financial(
@@ -177,6 +179,8 @@ def create_financial_record(
     }
     ```
     """
+    if data.paid_amount is not None and data.amount is not None and data.paid_amount > data.amount:
+        raise HTTPException(status_code=422, detail="المبلغ المدفوع لا يمكن أن يتجاوز المبلغ المستحق")
     record = models.FinancialRecord(**data.model_dump())
     db.add(record)
     db.commit()
@@ -193,8 +197,8 @@ def create_financial_record(
         )
         db.add(activity)
         db.commit()
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return record
 
@@ -214,7 +218,12 @@ def update_financial_record(
     r = q.first()
     if not r:
         raise HTTPException(status_code=404, detail="Financial record not found or access denied")
-    for k, v in data.model_dump(exclude_none=True).items():
+    update_data = data.model_dump(exclude_none=True)
+    new_paid = update_data.get('paid_amount', r.paid_amount)
+    new_amount = update_data.get('amount', r.amount)
+    if new_paid > new_amount:
+        raise HTTPException(status_code=422, detail="المبلغ المدفوع لا يمكن أن يتجاوز المبلغ المستحق")
+    for k, v in update_data.items():
         setattr(r, k, v)
     # Auto-update status
     if r.paid_amount >= r.amount:
@@ -235,8 +244,8 @@ def update_financial_record(
         )
         db.add(activity)
         db.commit()
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return r
 
@@ -268,5 +277,5 @@ def delete_financial_record(
         )
         db.add(activity)
         db.commit()
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)

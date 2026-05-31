@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -11,6 +12,7 @@ from datetime import time as dt_time
 from typing import List, Optional, Dict, Tuple
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # ── Configuration ────────────────────────────────────────────────────────────
 TIME_SLOTS = [
@@ -134,8 +136,8 @@ def auto_generate_schedules(
                 action="bulk_create",
                 description=f"Auto-generated {len(generated_list)} course schedules"
             )
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.warning("Activity log failed: %s", _e)
 
     return {"generated": len(generated_list), "preview": generated_list, "dry_run": dry_run}
 
@@ -331,8 +333,8 @@ def create_schedule(
             action="create",
             description=f"Created course schedule for {data.course_id}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return schedule
 
@@ -372,8 +374,8 @@ def update_schedule(
             action="update",
             description="Updated course schedule"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return s
 
@@ -404,8 +406,8 @@ def delete_schedule(
             action="delete",
             description="Deleted course schedule"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
 @router.post("/check-conflict", response_model=schemas.ConflictCheckResponse)
 def check_schedule_conflict(
@@ -485,8 +487,8 @@ def bulk_create_schedules(
             action="bulk_create",
             description=f"Bulk created {len(schedules)} course schedules"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return schemas.BulkScheduleCreateResponse(
         created=len(schedules),

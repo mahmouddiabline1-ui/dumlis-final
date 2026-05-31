@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -8,6 +9,7 @@ from app import models, schemas
 from app.routers.auth import get_scoped_faculty_id, get_current_user
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/")
@@ -140,6 +142,8 @@ def create_attendance(
     }
     ```
     """
+    if data.attendance_date and data.attendance_date > date.today():
+        raise HTTPException(status_code=422, detail="لا يمكن تسجيل حضور لتاريخ مستقبلي")
     existing = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.student_id      == data.student_id,
         models.AttendanceRecord.course_id       == data.course_id,
@@ -169,8 +173,8 @@ def create_attendance(
         )
         db.add(activity)
         db.commit()
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return record
 
@@ -237,8 +241,8 @@ def update_attendance(
         )
         db.add(activity)
         db.commit()
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return r
 

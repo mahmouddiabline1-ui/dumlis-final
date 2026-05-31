@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -9,11 +10,14 @@ from app.routers.auth import get_scoped_faculty_id, get_current_user
 from app.activity_helper import log_activity
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.get("/")
 def list_announcements(
     faculty_id: Optional[str] = Query(None),
     role_target: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
     scoped_faculty_id: Optional[str] = Depends(get_scoped_faculty_id),
 ):
@@ -31,7 +35,7 @@ def list_announcements(
     now = datetime.now()
     q = q.filter((models.Announcement.expires_at == None) | (models.Announcement.expires_at > now))
 
-    return q.order_by(models.Announcement.created_at.desc()).all()
+    return q.order_by(models.Announcement.created_at.desc()).offset(skip).limit(limit).all()
 
 @router.get("/{announcement_id}")
 def get_announcement(
@@ -73,8 +77,8 @@ def create_announcement(
             action="create",
             description=f"Created announcement: {data.title}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return announcement
 
@@ -105,8 +109,8 @@ def update_announcement(
             action="update",
             description="Updated announcement"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return announcement
 
@@ -134,5 +138,5 @@ def delete_announcement(
             action="delete",
             description="Deleted announcement"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)

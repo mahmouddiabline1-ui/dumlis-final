@@ -13,6 +13,7 @@ export interface User {
 export interface SubMenuItem {
   id: string;
   label: string;
+  superAdminOnly?: boolean;
 }
 
 export interface MenuGroup {

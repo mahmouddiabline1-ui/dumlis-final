@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
@@ -9,6 +10,7 @@ from app.activity_helper import log_activity
 from typing import Optional
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import select
 
@@ -96,8 +98,8 @@ def create_academic_rule(
                 action="update",
                 description="Updated academic rule"
             )
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.warning("Activity log failed: %s", _e)
 
         return existing_rule
 
@@ -126,8 +128,8 @@ def create_academic_rule(
                 action="update",
                 description="Updated academic rule"
             )
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.warning("Activity log failed: %s", _e)
 
         return existing_by_faculty
 
@@ -147,8 +149,8 @@ def create_academic_rule(
             action="create",
             description="Created academic rule"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return rule
 
@@ -183,8 +185,8 @@ def update_academic_rule(
             action="update",
             description="Updated academic rule"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return rule
 
@@ -216,5 +218,5 @@ def delete_academic_rule(
             action="delete",
             description="Deleted academic rule"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)

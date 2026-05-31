@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -8,6 +9,7 @@ from app.routers.auth import get_scoped_faculty_id, get_current_user
 from app.activity_helper import log_activity
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.get("/")
 def list_enrollments(
@@ -87,13 +89,54 @@ def create_enrollment(
     }
     ```
     """
+    # Validate student exists
+    student = db.query(models.Student).filter(models.Student.student_id == data.student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="الطالب غير موجود")
+
+    # Validate course exists and get credit hours
+    course = db.query(models.Course).filter(models.Course.id == data.course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="المقرر غير موجود")
+
+    # Check duplicate enrollment
     existing = db.query(models.Enrollment).filter(
         models.Enrollment.student_id == data.student_id,
         models.Enrollment.course_id  == data.course_id,
         models.Enrollment.semester   == data.semester
     ).first()
     if existing:
-        raise HTTPException(status_code=409, detail="Student already enrolled in this course for this semester")
+        raise HTTPException(status_code=409, detail="الطالب مسجل بالفعل في هذا المقرر لهذا الفصل الدراسي")
+
+    # Check course capacity
+    if course.max_capacity:
+        enrolled_count = db.query(models.Enrollment).filter(
+            models.Enrollment.course_id == data.course_id,
+            models.Enrollment.semester  == data.semester,
+            models.Enrollment.status    == "مسجل"
+        ).count()
+        if enrolled_count >= course.max_capacity:
+            raise HTTPException(status_code=422, detail=f"المقرر وصل للحد الأقصى ({course.max_capacity} طالب)")
+
+    # Check credit hour limit
+    rules = db.query(models.AcademicRule).filter(
+        models.AcademicRule.faculty_id == student.faculty_id
+    ).first()
+    max_hours = 21
+    if rules and hasattr(rules, 'max_hours_per_semester') and rules.max_hours_per_semester:
+        max_hours = rules.max_hours_per_semester
+    current_enrollments = db.query(models.Enrollment).filter(
+        models.Enrollment.student_id == data.student_id,
+        models.Enrollment.semester   == data.semester,
+        models.Enrollment.status     == "مسجل"
+    ).all()
+    current_hours = sum(
+        (db.query(models.Course).filter(models.Course.id == e.course_id).first() or type('', (), {'credit_hours': 0})()).credit_hours
+        for e in current_enrollments
+    )
+    if current_hours + (course.credit_hours or 3) > max_hours:
+        raise HTTPException(status_code=422, detail=f"يتجاوز الحد الأقصى للساعات ({max_hours} ساعة) — الساعات الحالية: {current_hours}")
+
     enrollment = models.Enrollment(**data.model_dump())
     db.add(enrollment)
     db.commit()
@@ -109,8 +152,8 @@ def create_enrollment(
             action="create",
             description=f"Enrolled {data.student_id} in {data.course_id}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return enrollment
 
@@ -144,8 +187,8 @@ def update_enrollment(
             action="update",
             description=f"Updated enrollment status to {data.status}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return e
 
@@ -177,5 +220,5 @@ def delete_enrollment(
             action="delete",
             description=f"Deleted enrollment for {student_id_ref}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)

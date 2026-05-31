@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
@@ -88,8 +89,8 @@ def create_program(
             action="create",
             description=f"Created academic program: {data.name}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return program
 
@@ -125,8 +126,8 @@ def update_program(
             action="update",
             description="Updated academic program"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return program
 
@@ -158,5 +159,5 @@ def delete_program(
             action="delete",
             description="Deleted academic program"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)

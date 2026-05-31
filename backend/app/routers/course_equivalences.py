@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -8,6 +9,7 @@ from app.routers.auth import get_scoped_faculty_id, get_current_user
 from app.activity_helper import log_activity
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/")
@@ -97,8 +99,8 @@ def create_course_equivalence(
             action="create",
             description=f"Created course equivalence for student {data.student_id}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return equivalence
 
@@ -140,8 +142,8 @@ def update_course_equivalence(
             action="update",
             description="Updated course equivalence"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return equivalence
 
@@ -179,5 +181,5 @@ def delete_course_equivalence(
             action="delete",
             description="Deleted course equivalence"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)

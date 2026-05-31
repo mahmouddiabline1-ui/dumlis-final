@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
@@ -8,6 +9,7 @@ from app.routers.auth import get_current_user
 from app.activity_helper import log_activity
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _require_super_admin(current_user: models.User):
@@ -21,15 +23,22 @@ def _require_super_admin(current_user: models.User):
 
 @router.get("/")
 def list_faculties(db: Session = Depends(get_db)):
-    """List all faculties — public read access."""
+    """List all faculties with real-time student counts."""
+    from sqlalchemy import func as sqlfunc
     faculties = db.query(models.Faculty).all()
+    # Real-time student counts per faculty
+    counts = dict(
+        db.query(models.Student.faculty_id, sqlfunc.count(models.Student.student_id))
+        .group_by(models.Student.faculty_id)
+        .all()
+    )
     return [
         {
             'id': f.id,
             'name': f.name,
             'name_en': f.name_en,
             'icon': f.icon,
-            'student_count': f.student_count,
+            'student_count': counts.get(f.id, f.student_count or 0),
             'staff_count': f.staff_count,
             'color': f.color,
         }
@@ -86,8 +95,8 @@ def create_faculty(
             action="create",
             description=f"Created faculty: {data.name}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return faculty
 
@@ -119,8 +128,8 @@ def update_faculty(
             action="update",
             description="Updated faculty"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return faculty
 
@@ -149,5 +158,5 @@ def delete_faculty(
             action="delete",
             description="Deleted faculty"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)

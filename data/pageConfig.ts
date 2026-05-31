@@ -1,5 +1,6 @@
 import { PageConfig, AcademicFaculty, AcademicDepartment, AcademicProgram, AcademicCourse, StudyRegulation, AcademicRules } from '../types';
 import { FACULTIES } from '../constants';
+import { FORM_OPTIONS } from './formOptions';
 
 
 export const COURSES_DATABASE: any[] = [];
@@ -3236,18 +3237,13 @@ export const getPageConfig = (id: string, facultyId?: string | null): PageConfig
           '14:00 - 16:00',
           '16:00 - 18:00'
         ];
-        // Real classrooms and labs from Faculty of Computers and AI
-        const rooms = [
-          // المدرجات (Lecture Halls)
+        // Use dynamically loaded rooms from API (via FORM_OPTIONS), fallback to static list
+        const rooms = FORM_OPTIONS.rooms.length > 0 ? FORM_OPTIONS.rooms : [
           'مدرج 101 B', 'مدرج 102 B', 'مدرج 103 B', 'مدرج 104 B', 'مدرج 105 B',
-          // القاعات (Classrooms)
           'قاعة 309 B', 'قاعة 310 B',
-          // المعامل - الدور الثاني (Labs - 2nd Floor)
           'معمل 201', 'معمل 202', 'معمل 203', 'معمل 204', 'معمل 205', 'معمل 206',
           'معمل 207', 'معمل 208', 'معمل 209', 'معمل 210', 'معمل 211', 'معمل 212',
-          // المعامل - الدور الرابع (Labs - 4th Floor)
-          'معمل 401', 'معمل 402', 'معمل 403', 'معمل 407', 'معمل 408', 'معمل 409',
-          'معمل 410', 'معمل 411', 'معمل 412', 'معمل 413', 'معمل 414'
+          'معمل 401', 'معمل 402', 'معمل 403', 'معمل 407', 'معمل 413', 'معمل 414'
         ];
         
         // Room capacities mapping
@@ -3318,7 +3314,8 @@ export const getPageConfig = (id: string, facultyId?: string | null): PageConfig
           'معمل 414': 'معمل'
         };
         
-        const instructors = [
+        // Use dynamically loaded instructors from API (via FORM_OPTIONS), fallback to static list
+        const instructors = FORM_OPTIONS.instructor_names.length > 0 ? FORM_OPTIONS.instructor_names : [
           'د. أحمد محمد السيد', 'د. منال حسن إبراهيم', 'د. خالد محمود علي',
           'د. سارة أحمد فؤاد', 'د. محمد عبدالله نصر', 'أ.د. فاطمة علي حسن',
           'د. يوسف سعيد كامل', 'د. نورا محمود جمال'

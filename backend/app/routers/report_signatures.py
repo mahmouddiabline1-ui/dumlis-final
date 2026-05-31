@@ -9,6 +9,7 @@ from app.routers.auth import get_scoped_faculty_id, get_current_user
 from app.activity_helper import log_activity
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.get("/")
 def get_report_signatures(
@@ -79,8 +80,8 @@ def create_report_signature(
             action="create",
             description=f"Created report signature: {signature.signatory_name}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return new_signature
 
@@ -118,8 +119,8 @@ def update_report_signature(
             action="update",
             description="Updated report signature"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return db_signature
 
@@ -152,7 +153,7 @@ def delete_report_signature(
             action="delete",
             description="Deleted report signature"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return None

@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -96,8 +97,8 @@ def create_course_close(
             action="create",
             description=f"Created course closure for {closure.course_code}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     db_closure.course_name = course.name
     return db_closure
@@ -135,8 +136,8 @@ def update_course_close(
             action="update",
             description="Updated course closure"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     db_closure.course_name = db_closure.course.name if db_closure.course else "غير محدد"
     return db_closure
@@ -170,7 +171,7 @@ def delete_course_close(
             action="delete",
             description="Deleted course closure"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return {"message": "Successfully deleted"}

@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -8,6 +9,7 @@ from app.activity_helper import log_activity
 import uuid
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _require_super_admin(current_user: models.User):
@@ -76,8 +78,8 @@ def create_user(
             action="create",
             description=f"Created user: {user_in.username}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return db_user
 
@@ -113,8 +115,8 @@ def update_user(
             action="update",
             description="Updated user"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return db_user
 
@@ -144,7 +146,7 @@ def delete_user(
             action="delete",
             description="Deleted user"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return None

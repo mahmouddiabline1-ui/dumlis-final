@@ -11,7 +11,7 @@ import DatabaseMigrator from './components/DatabaseMigrator';
 import { Bell, Search, User as UserIcon, Menu, LogOut, ChevronDown, Building2 } from 'lucide-react';
 import { UserRole, User } from './types';
 import { authApi } from './api';
-import { loadDynamicOptions } from './data/formOptions';
+import { loadDynamicOptions, refreshDynamicOptions } from './data/formOptions';
 import { lookupApi } from './lookupApi';
 import { FacultyContextProvider } from './contexts/FacultyContext';
 
@@ -30,6 +30,9 @@ function App() {
   });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const isFirstRender = useRef(true);
+
+  // Dynamic faculties — loaded from API, fallback to static FACULTIES
+  const [dynamicFaculties, setDynamicFaculties] = useState(FACULTIES);
 
   // Super Admin Specific State — restore selected faculty from localStorage
   const [selectedFacultyId, setSelectedFacultyId] = useState<string | null>(
@@ -98,6 +101,26 @@ function App() {
   // Load dynamic form options only AFTER authentication is confirmed
   useEffect(() => {
     if (isAuthenticated) {
+      // Load faculties from API and merge with static config (for real student counts)
+      lookupApi.getFaculties().then((apiFaculties: any[]) => {
+        if (apiFaculties && apiFaculties.length > 0) {
+          const FACULTY_ICONS: Record<string, string> = {
+            FCAI: '💻', FSC: '🔬', FEN: '⚙️', FED: '📚', PHR: '💊', LAW: '⚖️',
+          };
+          const FACULTY_COLORS: Record<string, string> = {
+            FCAI: 'bg-blue-600', FSC: 'bg-green-600', FEN: 'bg-purple-600',
+            FED: 'bg-yellow-600', PHR: 'bg-red-600', LAW: 'bg-orange-600',
+          };
+          setDynamicFaculties(apiFaculties.map((f: any) => ({
+            id: f.id,
+            name: f.name,
+            icon: f.icon || FACULTY_ICONS[f.id] || '🏫',
+            studentCount: f.student_count || 0,
+            staffCount: f.staff_count || 0,
+            color: f.color || FACULTY_COLORS[f.id] || 'bg-gray-600',
+          })));
+        }
+      }).catch(() => {});
       loadDynamicOptions().then(() => {
         // After fetching faculties, validate the saved faculty ID
         const restoredFaculty = localStorage.getItem('lastSelectedFacultyId');
@@ -139,7 +162,11 @@ function App() {
     } else {
       localStorage.removeItem('lastSelectedFacultyId');
     }
-  }, [selectedFacultyId]);
+    // Refresh faculty-specific form options when faculty changes
+    if (isAuthenticated) {
+      refreshDynamicOptions(selectedFacultyId).catch(() => {});
+    }
+  }, [selectedFacultyId, isAuthenticated]);
 
   // Persist academic structure view state
   useEffect(() => {
@@ -479,7 +506,7 @@ function App() {
                   </p>
                   {selectedFacultyId && (
                     <span className="text-[10px] px-1.5 py-0.5 bg-gold-500 text-primary-900 rounded-sm font-bold">
-                      {FACULTIES.find(f => f.id === selectedFacultyId)?.name || selectedFacultyId}
+                      {dynamicFaculties.find(f => f.id === selectedFacultyId)?.name || selectedFacultyId}
                     </span>
                   )}
                 </div>
@@ -581,7 +608,7 @@ function App() {
                     <Building2 className="w-4 h-4" />
                     <span className="hidden md:inline">
                       {selectedFacultyId
-                        ? FACULTIES.find(f => f.id === selectedFacultyId)?.name || 'الكل'
+                        ? dynamicFaculties.find(f => f.id === selectedFacultyId)?.name || 'الكل'
                         : 'جميع الكليات'}
                     </span>
                     <ChevronDown className={`w-4 h-4 transition-transform ${showFacultyMenu ? 'rotate-180' : ''}`} />
@@ -601,7 +628,7 @@ function App() {
                       </button>
 
                       {/* Individual Faculties */}
-                      {FACULTIES.map(faculty => (
+                      {dynamicFaculties.map(faculty => (
                         <button
                           key={faculty.id}
                           onClick={() => handleFacultySwitcher(faculty.id)}
@@ -645,7 +672,7 @@ function App() {
                   <p className="text-sm font-medium text-white">{currentUser?.name}</p>
                   <p className="text-xs text-primary-300">
                     {currentUser?.role === 'super_admin' ? 'رئيس الجامعة' :
-                      currentUser?.role === 'faculty_admin' ? (FACULTIES.find(f => f.id === selectedFacultyId)?.name || 'مدير النظام') : 
+                      currentUser?.role === 'faculty_admin' ? (dynamicFaculties.find(f => f.id === selectedFacultyId)?.name || 'مدير النظام') : 
                       currentUser?.role === 'student_affairs' ? 'موظف شؤون الطلاب' : 'طالب مقيد'}
                   </p>
                 </div>
@@ -705,6 +732,7 @@ function App() {
             activeTab={activeTab}
             activeSubItem={activeSubItemId}
             onSelectSubItem={setActiveSubItemId}
+            userRole={currentUser?.role}
           />
         )}
 

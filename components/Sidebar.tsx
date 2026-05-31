@@ -6,9 +6,10 @@ interface SidebarProps {
   activeTab: MainTab;
   activeSubItem: string | null;
   onSelectSubItem: (id: string) => void;
+  userRole?: string;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, activeSubItem, onSelectSubItem }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, activeSubItem, onSelectSubItem, userRole }) => {
   return (
     <aside className="w-64 bg-white border border-gray-100 rounded-2xl hidden md:flex flex-col h-[calc(100vh-8rem)] sticky top-24 overflow-y-auto shadow-sm ml-4 custom-scrollbar">
       <div className="p-6 border-b border-gray-100 bg-white sticky top-0 z-20 -mx-0 rounded-t-2xl">
@@ -31,7 +32,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, activeSubItem, onSelectSub
               {group.label}
             </h3>
             <div className="space-y-1">
-              {group.items.map((item) => (
+              {group.items.filter(item => !item.superAdminOnly || userRole === 'super_admin').map((item) => (
                 <button
                   key={item.id}
                   onClick={() => onSelectSubItem(item.id)}

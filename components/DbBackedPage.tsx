@@ -147,6 +147,10 @@ const DB_BACKED_IDS = new Set([
 
 export const isDbBackedPage = (pageId: string) => DB_BACKED_IDS.has(pageId);
 
+// Simple in-memory cache: key → { data, timestamp }
+const PAGE_CACHE = new Map<string, { data: TableResult; ts: number }>();
+const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
 const DbBackedPage: React.FC<DbBackedPageProps> = ({ pageId, title, facultyId, initialSearchTerm }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -158,11 +162,22 @@ const DbBackedPage: React.FC<DbBackedPageProps> = ({ pageId, title, facultyId, i
   const [result, setResult] = useState<TableResult>({ columns: [], rows: [] });
 
   useEffect(() => {
+    const cacheKey = `${pageId}-${facultyId || ''}-${currentUser.id}`;
     const run = async () => {
+      // Use cache when saveVersion is 0 (no mutation happened)
+      if (saveVersion === 0) {
+        const cached = PAGE_CACHE.get(cacheKey);
+        if (cached && Date.now() - cached.ts < CACHE_TTL) {
+          setResult(cached.data);
+          setLoading(false);
+          return;
+        }
+      }
       setLoading(true);
       setError(null);
       try {
         const data = await fetchForPage(pageId, facultyId || undefined, currentUser);
+        PAGE_CACHE.set(cacheKey, { data, ts: Date.now() });
         setResult(data);
       } catch (e: any) {
         setError(e?.message || 'Failed to load data');
@@ -352,7 +367,7 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
       const courseGrades      = gradeMap.get(course.id) || [];
       const courseAttendance  = attendMap.get(course.id) || [];
 
-      const active    = courseEnrollments.filter((e: any) => e.status === 'مسجل' || e.status === 'نشط').length;
+      const active    = courseEnrollments.filter((e: any) => e.status === 'مسجل').length;
       const withdrawn = courseEnrollments.filter((e: any) => e.status === 'منسحب').length;
       const passed    = courseGrades.filter((g: any) => Number(g.total) >= 60).length;
       const passRate  = courseGrades.length > 0 ? ((passed / courseGrades.length) * 100).toFixed(1) + '%' : '-';
@@ -1503,7 +1518,7 @@ async function fetchForPage(pageId: string, facultyId?: string, currentUser?: { 
       if (student.gpa) {
         calculated_gpa = (student.gpa as number).toFixed(2);
       } else if (grades_array.length > 0) {
-        calculated_gpa = (grades_array.reduce((a, b) => a + b) / grades_array.length / 25 * 4).toFixed(2);
+        calculated_gpa = (grades_array.reduce((a: number, b: number) => a + b, 0) / grades_array.length / 100 * 4.0).toFixed(2);
       } else {
         calculated_gpa = '0.00';
       }

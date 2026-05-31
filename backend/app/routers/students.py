@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
@@ -9,6 +10,7 @@ from app.routers.auth import get_current_user, get_scoped_faculty_id
 from app.activity_helper import log_activity
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.get("/")
 def list_students(
@@ -25,7 +27,10 @@ def list_students(
     scoped_faculty_id: Optional[str] = Depends(get_scoped_faculty_id),
 ):
     """List students with optional filters."""
-    q = db.query(models.Student).outerjoin(models.Faculty).outerjoin(models.Department)
+    q = db.query(models.Student).options(
+        joinedload(models.Student.faculty),
+        joinedload(models.Student.department)
+    ).outerjoin(models.Faculty).outerjoin(models.Department)
     effective_faculty_id = scoped_faculty_id or faculty_id
 
     if effective_faculty_id:
@@ -217,8 +222,8 @@ def create_student(
             action="create",
             description=f"Created student: {student.name} ({student.student_id})"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return student
 

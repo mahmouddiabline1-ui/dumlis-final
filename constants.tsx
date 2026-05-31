@@ -25,7 +25,7 @@ export const ADMIN_NAVIGATION: MainTab[] = [
           { id: 'academic_reg', label: 'التسجيل الأكاديمي للطلاب' },
           { id: 'report_signs', label: 'توقيعات التقارير' },
           { id: 'course_close', label: 'غلق المقررات' },
-          { id: 'sys_edit', label: 'تعديل النظام' }
+          { id: 'sys_edit', label: 'تعديل النظام', superAdminOnly: true }
         ]
       },
       {

@@ -310,6 +310,32 @@ export async function loadDynamicOptions() {
   }
 }
 
+/**
+ * Refresh faculty-specific dynamic options when the selected faculty changes.
+ * Reloads departments, courses, rooms, and instructors for the given faculty.
+ */
+export async function refreshDynamicOptions(facultyId: string | null) {
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('authToken') : null;
+  if (!token) return;
+  try {
+    const [departments, courses, rooms, instructors] = await Promise.all([
+      lookupApi.getDepartments(facultyId || undefined),
+      lookupApi.getCourses(facultyId ? { faculty_id: facultyId } : undefined),
+      lookupApi.getRooms(),
+      lookupApi.getInstructors(),
+    ]);
+    FORM_OPTIONS.departments = departments.map((d: any) => d.name);
+    FORM_OPTIONS.course_codes = courses.map((c: any) => c.id);
+    FORM_OPTIONS.course_names = courses.reduce((acc: Record<string, string>, c: any) => {
+      acc[c.id] = c.name; return acc;
+    }, {});
+    FORM_OPTIONS.rooms = rooms.map((r: any) => r.name);
+    FORM_OPTIONS.instructor_names = instructors.map((i: any) => i.name);
+  } catch (e) {
+    console.warn('refreshDynamicOptions failed:', e);
+  }
+}
+
 export const getFieldOptions = (fieldKey: string): string[] => {
   const fieldMapping: { [key: string]: string[] } = {
     'course_code': FORM_OPTIONS.course_codes,

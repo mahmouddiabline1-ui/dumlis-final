@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -8,6 +9,39 @@ from app.routers.auth import get_scoped_faculty_id, get_current_user
 from app.activity_helper import log_activity
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+def _letter_grade(total: float) -> tuple[str, float]:
+    """Return (letter, points) for a total score 0-100."""
+    if total >= 90: return "A+", 4.0
+    if total >= 85: return "A",  4.0
+    if total >= 80: return "B+", 3.7
+    if total >= 75: return "B",  3.3
+    if total >= 70: return "C+", 3.0
+    if total >= 65: return "C",  2.7
+    if total >= 60: return "D+", 2.3
+    if total >= 50: return "D",  2.0
+    return "F", 0.0
+
+def _auto_calc_grade(data):
+    """Auto-calculate total, letter, and points from components if not explicitly set."""
+    midterm    = data.midterm    or 0
+    final_exam = data.final_exam or 0
+    assignments= data.assignments or 0
+    oral       = data.oral       or 0
+    practical  = data.practical  or 0
+    # Only auto-calc if at least midterm and final are provided
+    if data.midterm is not None and data.final_exam is not None:
+        computed = round(midterm + final_exam + assignments + oral + practical, 1)
+        computed = min(100.0, max(0.0, computed))
+        if data.total is None:
+            data.total = computed
+        letter, points = _letter_grade(data.total)
+        if data.grade_letter is None:
+            data.grade_letter = letter
+        if data.grade_points is None:
+            data.grade_points = points
+    return data
 
 @router.get("/")
 def list_grades(
@@ -103,6 +137,8 @@ def create_grade(
     ).first()
     if existing:
         raise HTTPException(status_code=409, detail="Grade record already exists for this student/course/semester")
+    # Auto-calculate total and letter grade from components
+    data = _auto_calc_grade(data)
     grade = models.Grade(**data.model_dump())
     db.add(grade)
     db.commit()
@@ -118,8 +154,8 @@ def create_grade(
             action="create",
             description=f"Created grade for {data.student_id}: {data.course_id} - {data.total}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return grade
 
@@ -140,11 +176,11 @@ def update_grade(
     if not g:
         raise HTTPException(status_code=404, detail="Grade record not found or access denied")
 
-    # Resolve update data, prevent changing faculty_id if scoped
+    # Auto-calculate if components provided, then build update dict
+    data = _auto_calc_grade(data)
     update_data = data.model_dump(exclude_none=True)
     if scoped_faculty_id and "faculty_id" in update_data:
         del update_data["faculty_id"]
-
     for k, v in update_data.items():
         setattr(g, k, v)
     db.commit()
@@ -160,8 +196,8 @@ def update_grade(
             action="update",
             description=f"Updated grade: {list(update_data.keys())}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return g
 
@@ -192,5 +228,5 @@ def delete_grade(
             action="delete",
             description="Deleted grade record"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)

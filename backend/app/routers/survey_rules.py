@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -9,6 +10,7 @@ from app.routers.auth import get_scoped_faculty_id, get_current_user
 from app.activity_helper import log_activity
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/")
@@ -103,8 +105,8 @@ def create_survey_rule(
             action="create",
             description=f"Created survey rule: {data.name}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return rule
 
@@ -142,8 +144,8 @@ def update_survey_rule(
             action="update",
             description="Updated survey rule"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return rule
 
@@ -177,5 +179,5 @@ def delete_survey_rule(
             action="delete",
             description="Deleted survey rule"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)

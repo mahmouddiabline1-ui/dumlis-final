@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -8,6 +9,7 @@ from app.routers.auth import get_scoped_faculty_id, get_current_user
 from app.activity_helper import log_activity
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.get("/")
 def list_staff(
@@ -61,8 +63,8 @@ def create_staff(
             action="create",
             description=f"Created staff member {staff.id}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return staff
 
@@ -94,8 +96,8 @@ def update_staff(
             action="update",
             description=f"Updated staff member {staff_id}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return staff
 
@@ -123,5 +125,5 @@ def delete_staff(
             action="delete",
             description=f"Deleted staff member {staff_id}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)

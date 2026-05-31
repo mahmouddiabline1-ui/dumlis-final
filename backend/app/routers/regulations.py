@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -98,8 +99,8 @@ def create_regulation(
             action="create",
             description=f"Created study regulation: {data.name}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return regulation
 
@@ -135,8 +136,8 @@ def update_regulation(
             action="update",
             description="Updated study regulation"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return regulation
 
@@ -168,5 +169,5 @@ def delete_regulation(
             action="delete",
             description="Deleted study regulation"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)

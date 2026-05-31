@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -8,6 +9,7 @@ from app.routers.auth import get_scoped_faculty_id, get_current_user
 from app.activity_helper import log_activity
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/")
@@ -86,8 +88,8 @@ def create_block(
             action="create",
             description=f"Created student block for {data.student_id}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return block
 
@@ -122,8 +124,8 @@ def update_block(
             action="update",
             description="Updated student block"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return b
 
@@ -184,8 +186,8 @@ def create_request(
             action="create",
             description=f"Created registration request for student {data.student_id}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return req
 
@@ -223,8 +225,8 @@ def update_request(
             action="update",
             description="Updated registration request"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return r
 
@@ -255,5 +257,5 @@ def delete_request(
             action="delete",
             description="Deleted registration request"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)

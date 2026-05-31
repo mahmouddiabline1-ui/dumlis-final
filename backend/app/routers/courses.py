@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -8,6 +9,7 @@ from app.routers.auth import get_scoped_faculty_id, get_current_user
 from app.activity_helper import log_activity
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.get("/")
 def list_courses(
@@ -123,8 +125,8 @@ def create_course(
             action="create",
             description=f"Created course: {course.name}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return course
 
@@ -164,8 +166,8 @@ def update_course(
             action="update",
             description=f"Updated course: {list(update_data.keys())}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return course
 
@@ -196,8 +198,8 @@ def delete_course(
             action="delete",
             description=f"Deleted course: {course.name}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
 # ── Prerequisites ──────────────────────────────────────────────────
 @router.get("/{course_id}/prerequisites")
@@ -231,8 +233,8 @@ def add_prerequisite(
             action="create",
             description=f"Added prerequisite {data.prerequisite_id} to course {course_id}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return prereq
 
@@ -263,5 +265,5 @@ def remove_prerequisite(
             action="delete",
             description=f"Removed prerequisite {prereq_id} from course {course_id}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)

@@ -10,7 +10,7 @@ from typing import List, Optional
 
 from sqlalchemy import (
     BigInteger, Boolean, CheckConstraint, Column, Date, DateTime,
-    ForeignKey, Integer, Numeric, SmallInteger, String, Text, Time,
+    ForeignKey, Index, Integer, Numeric, SmallInteger, String, Text, Time,
     UniqueConstraint, func, ARRAY
 )
 from sqlalchemy.dialects.postgresql import UUID, INET, CITEXT, JSONB
@@ -780,3 +780,15 @@ class Announcement(Base):
     updated_at      : Mapped[datetime]         = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     faculty : Mapped[Optional["Faculty"]] = relationship(back_populates="announcements")
+
+
+# ---------------------------------------------------------------------------
+# Composite indexes for frequently-queried column combinations
+# ---------------------------------------------------------------------------
+Index('ix_enrollment_student_status',    Enrollment.student_id,      Enrollment.status)
+Index('ix_enrollment_course_semester',   Enrollment.course_id,        Enrollment.semester)
+Index('ix_grade_student_course_sem',     Grade.student_id,            Grade.course_id,    Grade.semester)
+Index('ix_attendance_student_course',    AttendanceRecord.student_id, AttendanceRecord.course_id)
+Index('ix_attendance_date',              AttendanceRecord.attendance_date)
+Index('ix_financial_student_status',     FinancialRecord.student_id,  FinancialRecord.status)
+Index('ix_financial_faculty',            FinancialRecord.faculty_id)

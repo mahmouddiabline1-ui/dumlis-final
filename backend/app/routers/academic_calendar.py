@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -9,6 +10,7 @@ from app.routers.auth import get_scoped_faculty_id, get_current_user
 from app.activity_helper import log_activity
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.get("/")
 def list_events(
@@ -65,8 +67,8 @@ def create_event(
             action="create",
             description=f"Created {data.event_type} event for {data.academic_year}"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return event
 
@@ -97,8 +99,8 @@ def update_event(
             action="update",
             description=f"Updated {event.event_type} event"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
 
     return event
 
@@ -126,5 +128,5 @@ def delete_event(
             action="delete",
             description=f"Deleted {event.event_type} event"
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.warning("Activity log failed: %s", _e)
