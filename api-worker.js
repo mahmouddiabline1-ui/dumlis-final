@@ -1,7 +1,7 @@
 export default {
   async fetch(request) {
     const url = new URL(request.url);
-    const targetUrl = 'https://dumlis-final-production.up.railway.app' + url.pathname + url.search;
+    const targetUrl = 'https://web-production-c97904.up.railway.app' + url.pathname + url.search;
 
     if (request.method === 'OPTIONS') {
       return new Response(null, {
