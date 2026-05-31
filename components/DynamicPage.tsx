@@ -87,6 +87,35 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
   const [formData, setFormData] = useState<any>({});
   const [dataVersion, setDataVersion] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [studentLookupStatus, setStudentLookupStatus] = useState<'idle' | 'loading' | 'found' | 'notfound'>('idle');
+  const studentLookupTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleStudentIdInput = (value: string, currentFormData: any, setFn: (d: any) => void) => {
+    const newData = { ...currentFormData, student_id: value };
+    if (studentLookupTimer.current) clearTimeout(studentLookupTimer.current);
+    if (value.length >= 7) {
+      setStudentLookupStatus('loading');
+      studentLookupTimer.current = setTimeout(async () => {
+        try {
+          const student = await studentsApi.get(value) as any;
+          if (student && student.student_id) {
+            const nameKey = 'name' in (currentFormData) || Object.keys(currentFormData).includes('name') ? 'name' : 'student_name';
+            setFn({ ...newData, [nameKey]: student.name, name: student.name, student_name: student.name });
+            setStudentLookupStatus('found');
+          } else {
+            setStudentLookupStatus('notfound');
+            setFn(newData);
+          }
+        } catch {
+          setStudentLookupStatus('notfound');
+          setFn(newData);
+        }
+      }, 400);
+    } else {
+      setStudentLookupStatus('idle');
+      setFn(newData);
+    }
+  };
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -201,6 +230,7 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
       case 'add':
         setEditingRow(null);
         setFormData({});
+        setStudentLookupStatus('idle');
         setModalType('add');
         setShowModal(true);
         break;
@@ -1612,6 +1642,53 @@ const DynamicPage: React.FC<DynamicPageProps> = ({ config, initialSearchTerm, se
                         <datalist id={`dl-${col.key}-${config.id}`}>
                           {fieldOptions.map((opt) => <option key={opt} value={opt} />)}
                         </datalist>
+                      </div>
+                    );
+                  }
+
+                  // Auto-fill student name when student_id is typed
+                  if (col.key === 'student_id' && modalType === 'add') {
+                    return (
+                      <div key={col.key} className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700 block">{col.label}</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={value}
+                            onChange={(e) => handleStudentIdInput(e.target.value, formData, setFormData)}
+                            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none transition-shadow pr-10"
+                            placeholder={`أدخل ${col.label}...`}
+                            required={modalType === 'add'}
+                          />
+                          {studentLookupStatus === 'loading' && (
+                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+                          )}
+                          {studentLookupStatus === 'found' && (
+                            <CheckCircle2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
+                          )}
+                          {studentLookupStatus === 'notfound' && value.length >= 7 && (
+                            <XCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-400" />
+                          )}
+                        </div>
+                        {studentLookupStatus === 'notfound' && value.length >= 7 && (
+                          <p className="text-xs text-red-500">الطالب غير موجود في قاعدة البيانات</p>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Make name/student_name readonly when auto-filled from student_id
+                  if ((col.key === 'name' || col.key === 'student_name') && studentLookupStatus === 'found' && formData.student_id) {
+                    return (
+                      <div key={col.key} className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700 block">{col.label}</label>
+                        <input
+                          type="text"
+                          value={value}
+                          readOnly
+                          className="w-full px-4 py-2.5 border border-green-300 rounded-lg bg-green-50 text-gray-800 font-medium"
+                          placeholder="سيتم ملؤه تلقائياً..."
+                        />
                       </div>
                     );
                   }
