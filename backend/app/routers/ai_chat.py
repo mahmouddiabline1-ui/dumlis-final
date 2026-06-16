@@ -20,7 +20,7 @@ from app.routers.auth import get_current_user, pwd_context
 from app import models
 
 router = APIRouter()
-MODEL = "llama-3.1-8b-instant"
+MODEL = "llama-3.3-70b-specdec"
 _groq_client: Optional[AsyncOpenAI] = None
 
 ADMIN_ROLES = {"super_admin", "faculty_admin", "student_affairs"}
@@ -68,16 +68,19 @@ STUDENT_SYSTEM = """أنت مساعد للطلاب في نظام DUMLIS — تع
 
 # ── Tool helper ───────────────────────────────────────────────────────────────
 
-def _row(obj) -> dict:
+def _row(obj, keys=None) -> dict:
+    cols = keys or [c.name for c in obj.__table__.columns]
     d = {}
-    for c in obj.__table__.columns:
-        val = getattr(obj, c.name)
+    for k in cols:
+        val = getattr(obj, k, None)
         if hasattr(val, 'isoformat'):
             val = val.isoformat()
         elif not isinstance(val, (str, int, float, bool, type(None))):
             val = str(val)
-        d[c.name] = val
+        d[k] = val
     return d
+
+STUDENT_KEYS = ["student_id","name","faculty_id","department_id","level","status","fees_status","phone","email","gpa"]
 
 def _fn(name: str, desc: str, props: dict, required: list = None) -> dict:
     return {"type": "function", "function": {
@@ -173,12 +176,12 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         if args.get("level"):       q = q.filter(models.Student.level == args["level"])
         if args.get("status"):      q = q.filter(models.Student.status == args["status"])
         if args.get("fees_status"): q = q.filter(models.Student.fees_status == args["fees_status"])
-        rows = q.limit(args.get("limit", 20)).all()
-        return {"count": len(rows), "students": [_row(s) for s in rows]}
+        rows = q.limit(min(args.get("limit", 10), 15)).all()
+        return {"count": len(rows), "students": [_row(s, STUDENT_KEYS) for s in rows]}
 
     elif name == "get_student":
         s = db.get(models.Student, args["student_id"])
-        return _row(s) if s else {"error": "الطالب غير موجود"}
+        return _row(s, STUDENT_KEYS) if s else {"error": "الطالب غير موجود"}
 
     elif name == "create_student":
         s = models.Student(**{k: v for k, v in args.items() if v is not None})
@@ -232,7 +235,7 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         q = db.query(models.Grade).filter(models.Grade.student_id == args["student_id"])
         if args.get("semester"): q = q.filter(models.Grade.semester == args["semester"])
         rows = q.all()
-        return {"count": len(rows), "grades": [_row(g) for g in rows]}
+        return {"count": len(rows), "grades": [_row(g, ["id","student_id","course_id","semester","midterm","final_exam","total","grade_letter","grade_points"]) for g in rows]}
 
     elif name == "update_grade":
         g = db.get(models.Grade, args["grade_id"])
