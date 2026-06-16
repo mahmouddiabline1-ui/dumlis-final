@@ -152,9 +152,19 @@ def _build_admin_context(db: Session) -> str:
         pending   = db.query(models.RegistrationRequest).filter(
             models.RegistrationRequest.status == "قيد المراجعة").count()
 
+        # Per-level counts
+        level_counts = {}
+        for lvl in range(1, 5):
+            c = db.query(models.Student).filter(models.Student.level == lvl).count()
+            if c > 0:
+                level_counts[lvl] = c
+
+        level_str = " | ".join(f"سنة {lvl}: {c}" for lvl, c in sorted(level_counts.items()))
+
         return (
             f"\n[إحصائيات النظام — مُحدَّثة الآن]\n"
             f"الطلاب: {total} إجمالي | {active} مقيد | {unpaid} غير مسدد الرسوم\n"
+            f"توزيع المستويات: {level_str or '—'}\n"
             f"الكليات: {fac_list}\n"
             f"إعلانات نشطة: {ann_count} | طلبات تسجيل معلّقة: {pending}\n"
         )
@@ -196,6 +206,12 @@ ADMIN_SYSTEM_BASE = """أنت مساعد إداري ذكي لنظام DUMLIS ا�
 - لا تخترع بيانات أو تختار قيم من عندك — انتظر تأكيد المستخدم
 - مثال: "سجله مادة" بدون تحديد المادة → اسأل: "أي مادة تريد تسجيله فيها؟"
 - مثال: "عدل درجته" بدون تحديد الدرجة → اسأل: "كم الدرجة الجديدة؟"
+
+## 🚫 لا تخترع بيانات أبداً:
+- لو الأداة ما رجعتش بيانات كافية → قل بصراحة "لا توجد بيانات متاحة"
+- لو مفيش أداة للموضوع المطلوب (جداول امتحانات، مواعيد، تفاصيل جداول...) → قل "هذه البيانات غير متوفرة في النظام حالياً"
+- الأرقام والأسماء اللي بتقولها لازم تيجي من نتيجة أداة حقيقية أو من السياق المحمّل أعلاه — مش من مخيلتك
+- لو مش متأكد → اسأل أو قل "لا أعلم"
 """
 
 STUDENT_SYSTEM = """أنت مساعد للطلاب في نظام DUMLIS — تعرض بيانات الطالب المسجّل فقط (قراءة فقط).
