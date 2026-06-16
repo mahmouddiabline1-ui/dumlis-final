@@ -42,21 +42,26 @@ PROVIDERS = [
     {"env": "CEREBRAS_API_KEY",  "base_url": "https://api.cerebras.ai/v1",
      "model": "llama3.1-8b",               "name": "Cerebras-8B"},
 
-    # ── SambaNova: 70B + 405B بنفس الـkey (limits مستقلة) ───────────────────
+    # ── SambaNova: 70B فقط (405B غير متاح على SambaNova Cloud) ─────────────
     {"env": "SAMBANOVA_API_KEY", "base_url": "https://api.sambanova.ai/v1",
      "model": "Meta-Llama-3.3-70B-Instruct","name": "SambaNova-70B"},
-    {"env": "SAMBANOVA_API_KEY", "base_url": "https://api.sambanova.ai/v1",
-     "model": "Meta-Llama-3.1-405B-Instruct","name": "SambaNova-405B"},
-
-    # ── Cloudflare Workers AI ─────────────────────────────────────────────────
-    {"env": "CLOUDFLARE_API_TOKEN", "base_url": None,
-     "model": "@cf/meta/llama-3.1-70b-instruct", "name": "Cloudflare-70B"},
 
     # ── Groq آخر ملجأ: 500K token/يوم ───────────────────────────────────────
     {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
      "model": "llama-3.1-8b-instant",       "name": "Groq-8B"},
 ]
 _provider_clients: dict[str, AsyncOpenAI] = {}
+_blacklisted_until: dict[str, float] = {}   # provider name → unix timestamp
+
+
+def _blacklist(name: str, seconds: int = 300) -> None:
+    import time
+    _blacklisted_until[name] = time.time() + seconds
+
+
+def _is_blacklisted(name: str) -> bool:
+    import time
+    return time.time() < _blacklisted_until.get(name, 0)
 
 
 def _get_client(provider: dict) -> Optional[AsyncOpenAI]:
@@ -617,6 +622,9 @@ async def chat(
     # ── Try each provider in order ────────────────────────────────────────────
     last_error = "لا يوجد provider متاح"
     for provider in PROVIDERS:
+        if _is_blacklisted(provider["name"]):
+            continue  # rate-limited recently, skip fast
+
         client = _get_client(provider)
         if client is None:
             continue  # key not configured, skip
@@ -647,6 +655,7 @@ async def chat(
         except Exception as e:
             if _should_skip_provider(e):
                 last_error = f"{provider['name']}: {str(e)[:120]}"
+                _blacklist(provider["name"], seconds=300)  # skip for 5 min
                 continue  # try next provider
             raise HTTPException(status_code=502, detail=f"خطأ من {provider['name']}: {type(e).__name__}: {e}")
 
