@@ -27,27 +27,25 @@ ADMIN_ROLES = {"super_admin", "faculty_admin", "student_affairs"}
 
 # ── Provider registry (tried in order, skip on 429 / auth error) ──────────────
 PROVIDERS = [
-    # ── Cerebras: أسرع inference (hardware مخصص) ─────────────────────────────
-    {"env": "CEREBRAS_API_KEY",  "base_url": "https://api.cerebras.ai/v1",
-     "model": "llama3.3-70b",               "name": "Cerebras-70B"},
+    # ── 8B أولاً: أسرع (2-5ث/call) → 3 calls في أقل من 20ث ─────────────────
     {"env": "CEREBRAS_API_KEY",  "base_url": "https://api.cerebras.ai/v1",
      "model": "llama3.1-8b",               "name": "Cerebras-8B"},
-
-    # ── Groq: سريع وموثوق ────────────────────────────────────────────────────
-    {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
-     "model": "llama-3.3-70b-versatile",   "name": "Groq-3.3-70B"},
-    {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
-     "model": "llama-3.1-70b-versatile",   "name": "Groq-3.1-70B"},
     {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
      "model": "llama-3.1-8b-instant",       "name": "Groq-8B"},
 
-    # ── Gemini: 1M token/يوم مجاناً ──────────────────────────────────────────
+    # ── Gemini: سريع ومستقر (RPM كبير) ──────────────────────────────────────
     {"env": "GEMINI_API_KEY",    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
      "model": "gemini-2.0-flash",           "name": "Gemini-2.0-Flash"},
     {"env": "GEMINI_API_KEY",    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
      "model": "gemini-1.5-flash",           "name": "Gemini-1.5-Flash"},
 
-    # ── SambaNova: fallback ───────────────────────────────────────────────────
+    # ── 70B كـfallback: أبطأ لكن أدق ────────────────────────────────────────
+    {"env": "CEREBRAS_API_KEY",  "base_url": "https://api.cerebras.ai/v1",
+     "model": "llama3.3-70b",               "name": "Cerebras-70B"},
+    {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
+     "model": "llama-3.3-70b-versatile",   "name": "Groq-3.3-70B"},
+    {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
+     "model": "llama-3.1-70b-versatile",   "name": "Groq-3.1-70B"},
     {"env": "SAMBANOVA_API_KEY", "base_url": "https://api.sambanova.ai/v1",
      "model": "Meta-Llama-3.3-70B-Instruct","name": "SambaNova-70B"},
 ]
@@ -55,9 +53,13 @@ _provider_clients: dict[str, AsyncOpenAI] = {}
 _blacklisted_until: dict[str, float] = {}   # provider name → unix timestamp
 
 
-def _blacklist(name: str, seconds: int = 300) -> None:
+def _blacklist(name: str, seconds: int = 60) -> None:
     import time
     _blacklisted_until[name] = time.time() + seconds
+
+
+def _blacklist_long(name: str) -> None:
+    _blacklist(name, seconds=300)  # 5 min for hard rate limits
 
 
 def _is_blacklisted(name: str) -> bool:
@@ -642,7 +644,7 @@ async def chat(
             for iteration in range(10):
                 resp = await client.chat.completions.create(
                     model=provider["model"], messages=loop_messages, tools=tools,
-                    tool_choice="auto", max_tokens=2048, temperature=0.3,
+                    tool_choice="auto", max_tokens=600, temperature=0.3,
                 )
                 choice = resp.choices[0]
                 if choice.finish_reason != "tool_calls":
@@ -665,7 +667,11 @@ async def chat(
             if _should_skip_provider(e):
                 last_error = f"{provider['name']}: {str(e)[:120]}"
                 logger.warning("AI: skip %s — %s", provider["name"], str(e)[:80])
-                _blacklist(provider["name"], seconds=300)  # skip for 5 min
+                err = str(e).lower()
+                if any(x in err for x in ["429", "rate_limit", "quota"]):
+                    _blacklist_long(provider["name"])   # hard rate limit → 5 min
+                else:
+                    _blacklist(provider["name"])         # timeout/auth → 60 sec
                 continue  # try next provider
             raise HTTPException(status_code=502, detail=f"خطأ من {provider['name']}: {type(e).__name__}: {e}")
 
