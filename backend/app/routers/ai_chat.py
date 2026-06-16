@@ -2,18 +2,19 @@
 DUMLIS - AI Chat Router
 Agentic chat powered by Groq (OpenAI-compatible API).
 Admins get full read/write access; students get read-only access to their own data only.
+Uses direct DB queries — no internal HTTP self-calls.
 """
 import os
 import json
 import uuid
-from typing import Any
+from typing import Any, Optional
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.database import get_db
 from app.routers.auth import get_current_user
@@ -22,10 +23,8 @@ from app import models
 router = APIRouter()
 
 MODEL = "llama-3.3-70b-versatile"
-PORT = os.getenv("PORT", "8000")
-INTERNAL_BASE = f"http://127.0.0.1:{PORT}"
 
-_groq_client: AsyncOpenAI | None = None
+_groq_client: Optional[AsyncOpenAI] = None
 
 def get_groq_client() -> AsyncOpenAI:
     global _groq_client
@@ -60,7 +59,7 @@ ADMIN_SYSTEM = """أنت مساعد ذكي لإدارة الجامعة في نظ
 تساعد أدمن الكلية على:
 - البحث عن الطلاب وعرض بياناتهم وتحديثها
 - قبول أو رفض طلبات التسجيل
-- عرض الدرجات والحضور والوضع المالي للطلاب
+- عرض وتعديل الدرجات والحضور والوضع المالي
 - إنشاء إعلانات للطلاب
 - عرض الإحصائيات والتقارير
 - إدارة المواد والقاعات واللجان
@@ -91,16 +90,15 @@ ADMIN_TOOLS = [
         "type": "function",
         "function": {
             "name": "search_students",
-            "description": "البحث عن طلاب في النظام بفلاتر متعددة",
+            "description": "البحث عن طلاب في النظام",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "search":        {"type": "string",  "description": "اسم أو رقم الطالب"},
                     "faculty_id":    {"type": "string"},
-                    "department_id": {"type": "string"},
                     "level":         {"type": "integer", "description": "المستوى 1-4"},
-                    "status":        {"type": "string",  "enum": ["active","inactive","graduated","suspended"]},
-                    "fees_status":   {"type": "string",  "enum": ["paid","unpaid","partial"]},
+                    "status":        {"type": "string"},
+                    "fees_status":   {"type": "string"},
                     "limit":         {"type": "integer", "default": 20},
                 },
             },
@@ -110,7 +108,7 @@ ADMIN_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_student",
-            "description": "جلب بيانات طالب محدد بالـ ID",
+            "description": "جلب بيانات طالب محدد",
             "parameters": {
                 "type": "object",
                 "properties": {"student_id": {"type": "string"}},
@@ -141,7 +139,7 @@ ADMIN_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_student_grades",
-            "description": "عرض درجات طالب محدد",
+            "description": "عرض درجات طالب",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -155,8 +153,29 @@ ADMIN_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "update_grade",
+            "description": "تعديل درجة طالب في مادة محددة",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "grade_id":    {"type": "integer", "description": "رقم الدرجة من get_student_grades"},
+                    "midterm":     {"type": "number"},
+                    "final_exam":  {"type": "number"},
+                    "assignments": {"type": "number"},
+                    "oral":        {"type": "number"},
+                    "practical":   {"type": "number"},
+                    "total":       {"type": "number"},
+                    "grade_letter":{"type": "string"},
+                },
+                "required": ["grade_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_student_attendance",
-            "description": "عرض سجل حضور طالب محدد",
+            "description": "عرض سجل حضور طالب",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -171,7 +190,7 @@ ADMIN_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_student_financial",
-            "description": "عرض الوضع المالي والرسوم لطالب محدد",
+            "description": "عرض الوضع المالي لطالب",
             "parameters": {
                 "type": "object",
                 "properties": {"student_id": {"type": "string"}},
@@ -187,7 +206,7 @@ ADMIN_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "status":     {"type": "string", "enum": ["pending","approved","rejected"]},
+                    "status":     {"type": "string"},
                     "faculty_id": {"type": "string"},
                 },
             },
@@ -202,8 +221,8 @@ ADMIN_TOOLS = [
                 "type": "object",
                 "properties": {
                     "request_id":     {"type": "string"},
-                    "status":         {"type": "string", "enum": ["approved","rejected"]},
-                    "admin_response": {"type": "string", "description": "رد الأدمن على الطلب"},
+                    "status":         {"type": "string", "description": "مقبول أو مرفوض"},
+                    "admin_response": {"type": "string"},
                 },
                 "required": ["request_id", "status"],
             },
@@ -213,16 +232,15 @@ ADMIN_TOOLS = [
         "type": "function",
         "function": {
             "name": "create_announcement",
-            "description": "إنشاء إعلان جديد للطلاب",
+            "description": "إنشاء إعلان جديد",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "title":      {"type": "string"},
-                    "content":    {"type": "string"},
+                    "body":       {"type": "string"},
                     "faculty_id": {"type": "string"},
-                    "status":     {"type": "string", "enum": ["active","inactive"], "default": "active"},
                 },
-                "required": ["title", "content"],
+                "required": ["title", "body"],
             },
         },
     },
@@ -230,7 +248,7 @@ ADMIN_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_statistics",
-            "description": "إحصائيات عامة عن الطلاب في الكلية",
+            "description": "إحصائيات عامة عن الطلاب",
             "parameters": {
                 "type": "object",
                 "properties": {"faculty_id": {"type": "string"}},
@@ -245,10 +263,9 @@ ADMIN_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "faculty_id":    {"type": "string"},
-                    "department_id": {"type": "string"},
-                    "level":         {"type": "integer"},
-                    "semester":      {"type": "string"},
+                    "faculty_id": {"type": "string"},
+                    "level":      {"type": "integer"},
+                    "semester":   {"type": "string"},
                 },
             },
         },
@@ -257,7 +274,7 @@ ADMIN_TOOLS = [
         "type": "function",
         "function": {
             "name": "list_rooms",
-            "description": "عرض القاعات والمدرجات",
+            "description": "عرض القاعات",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -275,8 +292,8 @@ ADMIN_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "status":   {"type": "string"},
-                    "semester": {"type": "string"},
+                    "faculty_id": {"type": "string"},
+                    "semester":   {"type": "string"},
                 },
             },
         },
@@ -288,10 +305,7 @@ ADMIN_TOOLS = [
             "description": "عرض الإعلانات",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "faculty_id": {"type": "string"},
-                    "status":     {"type": "string"},
-                },
+                "properties": {"faculty_id": {"type": "string"}},
             },
         },
     },
@@ -310,7 +324,7 @@ STUDENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_my_grades",
-            "description": "جلب درجاتي في المواد",
+            "description": "جلب درجاتي",
             "parameters": {
                 "type": "object",
                 "properties": {"semester": {"type": "string"}},
@@ -332,7 +346,7 @@ STUDENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_my_financial",
-            "description": "جلب وضعي المالي والرسوم المستحقة",
+            "description": "جلب وضعي المالي",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -372,129 +386,235 @@ STUDENT_TOOLS = [
 ]
 
 
-# ── Tool Execution ─────────────────────────────────────────────────────────────
+# ── Helpers ────────────────────────────────────────────────────────────────────
 
-def _params(**kwargs) -> dict:
-    return {k: v for k, v in kwargs.items() if v is not None}
+def _s(obj) -> dict:
+    """Convert SQLAlchemy model to plain dict, skipping relationship proxies."""
+    d = {}
+    for c in obj.__table__.columns:
+        val = getattr(obj, c.name)
+        if hasattr(val, 'isoformat'):
+            val = val.isoformat()
+        elif hasattr(val, '__str__') and not isinstance(val, (str, int, float, bool, type(None))):
+            val = str(val)
+        d[c.name] = val
+    return d
 
 
-async def run_tool(
-    name: str,
-    args: dict,
-    user: models.User,
-    token: str,
-    db: Session,
-) -> Any:
-    headers = {"Authorization": f"Bearer {token}"}
+# ── Tool Execution (direct DB) ─────────────────────────────────────────────────
 
-    async with httpx.AsyncClient(base_url=INTERNAL_BASE, headers=headers, timeout=30) as client:
+async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any:
 
-        # ── Admin tools ───────────────────────────────────────────────────────
-        if name == "search_students":
-            r = await client.get("/students/", params=_params(**args))
-            return r.json()
+    # ── Admin tools ───────────────────────────────────────────────────────────
 
-        elif name == "get_student":
-            r = await client.get(f"/students/{args['student_id']}")
-            return r.json()
+    if name == "search_students":
+        q = db.query(models.Student)
+        if args.get("search"):
+            term = f"%{args['search']}%"
+            q = q.filter(
+                models.Student.name.ilike(term) |
+                models.Student.student_id.ilike(term)
+            )
+        if args.get("faculty_id"):
+            q = q.filter(models.Student.faculty_id == args["faculty_id"])
+        if args.get("level"):
+            q = q.filter(models.Student.level == args["level"])
+        if args.get("status"):
+            q = q.filter(models.Student.status == args["status"])
+        if args.get("fees_status"):
+            q = q.filter(models.Student.fees_status == args["fees_status"])
+        students = q.limit(args.get("limit", 20)).all()
+        return {"count": len(students), "students": [_s(s) for s in students]}
 
-        elif name == "update_student":
-            sid = args.pop("student_id")
-            update_data = {k: v for k, v in args.items() if v is not None}
-            r = await client.put(f"/students/{sid}", json=update_data)
-            return r.json()
+    elif name == "get_student":
+        s = db.query(models.Student).filter(models.Student.student_id == args["student_id"]).first()
+        return _s(s) if s else {"error": "الطالب غير موجود"}
 
-        elif name == "get_student_grades":
-            r = await client.get("/student-grades/", params=_params(**args))
-            return r.json()
+    elif name == "update_student":
+        sid = args["student_id"]
+        s = db.query(models.Student).filter(models.Student.student_id == sid).first()
+        if not s:
+            return {"error": "الطالب غير موجود"}
+        for field in ("status", "fees_status", "phone", "email", "level"):
+            if args.get(field) is not None:
+                setattr(s, field, args[field])
+        db.commit()
+        return {"success": True, "student": _s(s)}
 
-        elif name == "get_student_attendance":
-            r = await client.get("/attendance/", params=_params(**args))
-            return r.json()
+    elif name == "get_student_grades":
+        q = db.query(models.Grade).filter(models.Grade.student_id == args["student_id"])
+        if args.get("semester"):
+            q = q.filter(models.Grade.semester == args["semester"])
+        grades = q.all()
+        return {"count": len(grades), "grades": [_s(g) for g in grades]}
 
-        elif name == "get_student_financial":
-            r = await client.get(f"/financial/student/{args['student_id']}/summary")
-            return r.json()
+    elif name == "update_grade":
+        grade = db.query(models.Grade).filter(models.Grade.id == args["grade_id"]).first()
+        if not grade:
+            return {"error": "الدرجة غير موجودة"}
+        for field in ("midterm", "final_exam", "assignments", "oral", "practical", "total", "grade_letter"):
+            if args.get(field) is not None:
+                setattr(grade, field, args[field])
+        db.commit()
+        return {"success": True, "grade": _s(grade)}
 
-        elif name == "list_registration_requests":
-            r = await client.get("/registration-requests/", params=_params(**args))
-            return r.json()
+    elif name == "get_student_attendance":
+        q = db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.student_id == args["student_id"]
+        )
+        if args.get("course_id"):
+            q = q.filter(models.AttendanceRecord.course_id == args["course_id"])
+        records = q.order_by(models.AttendanceRecord.attendance_date.desc()).limit(100).all()
+        present = sum(1 for r in records if r.status == "حاضر")
+        absent  = sum(1 for r in records if r.status == "غائب")
+        return {
+            "total": len(records),
+            "present": present,
+            "absent": absent,
+            "rate": round(present / len(records) * 100, 1) if records else 0,
+            "records": [_s(r) for r in records[:20]],
+        }
 
-        elif name == "update_registration_request":
-            rid = args.pop("request_id")
-            r = await client.put(f"/registration-requests/{rid}", json=args)
-            return r.json()
+    elif name == "get_student_financial":
+        records = db.query(models.FinancialRecord).filter(
+            models.FinancialRecord.student_id == args["student_id"]
+        ).all()
+        total_due  = sum(float(r.amount or 0) for r in records)
+        total_paid = sum(float(r.paid_amount or 0) for r in records)
+        return {
+            "total_due":  total_due,
+            "total_paid": total_paid,
+            "remaining":  total_due - total_paid,
+            "records": [_s(r) for r in records],
+        }
 
-        elif name == "create_announcement":
-            r = await client.post("/announcements/", json=args)
-            return r.json()
+    elif name == "list_registration_requests":
+        q = db.query(models.RegistrationRequest)
+        if args.get("faculty_id"):
+            q = q.filter(models.RegistrationRequest.faculty_id == args["faculty_id"])
+        if args.get("status"):
+            q = q.filter(models.RegistrationRequest.status == args["status"])
+        items = q.order_by(models.RegistrationRequest.created_at.desc()).limit(50).all()
+        return {"count": len(items), "requests": [_s(r) for r in items]}
 
-        elif name == "get_statistics":
-            r = await client.get("/students/statistics", params=_params(**args))
-            return r.json()
+    elif name == "update_registration_request":
+        req = db.query(models.RegistrationRequest).filter(
+            models.RegistrationRequest.id == args["request_id"]
+        ).first()
+        if not req:
+            return {"error": "الطلب غير موجود"}
+        req.status = args["status"]
+        if args.get("admin_response"):
+            req.admin_response = args["admin_response"]
+        db.commit()
+        return {"success": True, "request": _s(req)}
 
-        elif name == "list_courses":
-            r = await client.get("/courses/", params=_params(**args))
-            return r.json()
+    elif name == "create_announcement":
+        ann = models.Announcement(
+            title=args["title"],
+            body=args["body"],
+            faculty_id=args.get("faculty_id"),
+            is_active=True,
+        )
+        db.add(ann)
+        db.commit()
+        return {"success": True, "id": str(ann.id), "title": ann.title}
 
-        elif name == "list_rooms":
-            r = await client.get("/rooms/", params=_params(**args))
-            return r.json()
+    elif name == "get_statistics":
+        q = db.query(models.Student)
+        if args.get("faculty_id"):
+            q = q.filter(models.Student.faculty_id == args["faculty_id"])
+        total   = q.count()
+        active  = q.filter(models.Student.status == "مقيد").count()
+        paid    = q.filter(models.Student.fees_status == "مسدد").count()
+        unpaid  = q.filter(models.Student.fees_status == "غير مسدد").count()
+        return {"total": total, "active": active, "paid_fees": paid, "unpaid_fees": unpaid}
 
-        elif name == "list_committees":
-            r = await client.get("/committees/", params=_params(**args))
-            return r.json()
+    elif name == "list_courses":
+        q = db.query(models.Course)
+        if args.get("faculty_id"):
+            q = q.filter(models.Course.faculty_id == args["faculty_id"])
+        if args.get("level"):
+            q = q.filter(models.Course.level == args["level"])
+        if args.get("semester"):
+            q = q.filter(models.Course.semester == args["semester"])
+        courses = q.limit(50).all()
+        return {"count": len(courses), "courses": [_s(c) for c in courses]}
 
-        elif name == "list_announcements":
-            r = await client.get("/announcements/", params=_params(**args))
-            return r.json()
+    elif name == "list_rooms":
+        q = db.query(models.Room)
+        if args.get("room_type"):
+            q = q.filter(models.Room.room_type == args["room_type"])
+        if args.get("status"):
+            q = q.filter(models.Room.status == args["status"])
+        rooms = q.limit(50).all()
+        return {"count": len(rooms), "rooms": [_s(r) for r in rooms]}
 
-        # ── Student-scoped tools (read-only, own data) ────────────────────────
-        elif name in {"get_my_profile","get_my_grades","get_my_attendance","get_my_financial","get_my_schedule","get_my_enrollments"}:
-            student = db.query(models.Student).filter(models.Student.user_id == user.id).first()
-            if not student:
-                return {"error": "لم يتم ربط حسابك بسجل طالب، تواصل مع إدارة الكلية."}
+    elif name == "list_committees":
+        q = db.query(models.Committee)
+        if args.get("faculty_id"):
+            q = q.filter(models.Committee.faculty_id == args["faculty_id"])
+        if args.get("semester"):
+            q = q.filter(models.Committee.semester == args["semester"])
+        committees = q.limit(50).all()
+        return {"count": len(committees), "committees": [_s(c) for c in committees]}
 
-            sid = student.student_id
+    elif name == "list_announcements":
+        q = db.query(models.Announcement).filter(models.Announcement.is_active == True)
+        if args.get("faculty_id"):
+            q = q.filter(models.Announcement.faculty_id == args["faculty_id"])
+        items = q.order_by(models.Announcement.created_at.desc()).limit(20).all()
+        return {"count": len(items), "announcements": [_s(a) for a in items]}
 
-            if name == "get_my_profile":
-                r = await client.get(f"/students/{sid}")
-                return r.json()
+    # ── Student-scoped tools (own data only) ──────────────────────────────────
 
-            elif name == "get_my_grades":
-                params = {"student_id": sid}
-                if args.get("semester"):
-                    params["semester"] = args["semester"]
-                r = await client.get("/student-grades/", params=params)
-                return r.json()
+    elif name in {"get_my_profile","get_my_grades","get_my_attendance","get_my_financial","get_my_schedule","get_my_enrollments"}:
+        student = db.query(models.Student).filter(models.Student.user_id == user.id).first()
+        if not student:
+            return {"error": "لم يتم ربط حسابك بسجل طالب، تواصل مع إدارة الكلية."}
+        sid = student.student_id
 
-            elif name == "get_my_attendance":
-                params = {"student_id": sid}
-                if args.get("course_id"):
-                    params["course_id"] = args["course_id"]
-                r = await client.get("/attendance/", params=params)
-                return r.json()
+        if name == "get_my_profile":
+            return _s(student)
 
-            elif name == "get_my_financial":
-                r = await client.get(f"/financial/student/{sid}/summary")
-                return r.json()
+        elif name == "get_my_grades":
+            q = db.query(models.Grade).filter(models.Grade.student_id == sid)
+            if args.get("semester"):
+                q = q.filter(models.Grade.semester == args["semester"])
+            return {"grades": [_s(g) for g in q.all()]}
 
-            elif name == "get_my_schedule":
-                params = {}
-                if args.get("semester"):
-                    params["semester"] = args["semester"]
-                r = await client.get(f"/schedules/student/{sid}", params=params)
-                return r.json()
+        elif name == "get_my_attendance":
+            q = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.student_id == sid)
+            if args.get("course_id"):
+                q = q.filter(models.AttendanceRecord.course_id == args["course_id"])
+            records = q.order_by(models.AttendanceRecord.attendance_date.desc()).limit(50).all()
+            present = sum(1 for r in records if r.status == "حاضر")
+            return {"total": len(records), "present": present, "absent": len(records)-present, "records": [_s(r) for r in records]}
 
-            elif name == "get_my_enrollments":
-                params = {"student_id": sid}
-                if args.get("semester"):
-                    params["semester"] = args["semester"]
-                r = await client.get("/enrollments/", params=params)
-                return r.json()
+        elif name == "get_my_financial":
+            records = db.query(models.FinancialRecord).filter(models.FinancialRecord.student_id == sid).all()
+            total_due  = sum(float(r.amount or 0) for r in records)
+            total_paid = sum(float(r.paid_amount or 0) for r in records)
+            return {"total_due": total_due, "total_paid": total_paid, "remaining": total_due - total_paid, "records": [_s(r) for r in records]}
 
-        else:
-            return {"error": f"أداة غير معروفة: {name}"}
+        elif name == "get_my_schedule":
+            q = db.query(models.CourseSchedule).join(
+                models.Enrollment,
+                (models.Enrollment.course_id == models.CourseSchedule.course_id) &
+                (models.Enrollment.student_id == sid)
+            )
+            if args.get("semester"):
+                q = q.filter(models.CourseSchedule.semester == args["semester"])
+            return {"schedule": [_s(s) for s in q.all()]}
+
+        elif name == "get_my_enrollments":
+            q = db.query(models.Enrollment).filter(models.Enrollment.student_id == sid)
+            if args.get("semester"):
+                q = q.filter(models.Enrollment.semester == args["semester"])
+            return {"enrollments": [_s(e) for e in q.all()]}
+
+    else:
+        return {"error": f"أداة غير معروفة: {name}"}
 
 
 # ── Chat Endpoint ──────────────────────────────────────────────────────────────
@@ -502,7 +622,6 @@ async def run_tool(
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     body: ChatRequest,
-    token: str = Depends(oauth2_scheme),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -515,7 +634,6 @@ async def chat(
     messages = [{"role": "system", "content": system_prompt}]
     messages += [{"role": m.role, "content": m.content} for m in body.messages]
 
-    # Agentic loop: keep calling until no more tool calls
     for _ in range(10):
         response = await groq.chat.completions.create(
             model=MODEL,
@@ -531,13 +649,12 @@ async def chat(
         if choice.finish_reason != "tool_calls":
             return ChatResponse(response=choice.message.content or "")
 
-        # Execute all requested tool calls
         messages.append(choice.message)
 
         for tc in choice.message.tool_calls:
             try:
                 args = json.loads(tc.function.arguments)
-                result = await run_tool(tc.function.name, args, current_user, token, db)
+                result = await run_tool(tc.function.name, args, current_user, db)
             except Exception as e:
                 result = {"error": str(e)}
 
