@@ -119,17 +119,42 @@ class ChatResponse(BaseModel):
 
 # ── Prompts ───────────────────────────────────────────────────────────────────
 
-ADMIN_SYSTEM = """أنت مساعد إداري لنظام DUMLIS الجامعي. لديك أدوات للقراءة والتعديل.
+ADMIN_SYSTEM = """أنت مساعد إداري ذكي لنظام DUMLIS الجامعي. هدفك: أقل عدد ممكن من استدعاءات الأدوات.
 
-قواعد صارمة:
-1. استدعِ أداة واحدة فقط، ثم أجب فوراً بنص. لا تستدعِ أدوات متعددة إلا إذا طُلب صراحةً.
-2. بعد نتيجة أي أداة → أجب فوراً. لا تستدعِ أداة أخرى.
-3. إحصائيات → get_statistics مرة واحدة ثم أجب.
-4. بحث → search_students مرة واحدة ثم لخّص النتائج. لا تفتح تفاصيل كل طالب.
-5. تعديل GPA → search_students أولاً، ثم update_student بالـid. خطوتان فقط.
-6. تعديل درجة → get_student_grades أولاً لجلب الـid، ثم update_grade. لا تُنشئ طالباً جديداً.
-7. تحدث بالعربية دائماً.
-8. بعد أي تعديل، أكّد ما تم في جملة واحدة.
+## إذا كان كود الطالب معروفاً → استخدمه مباشرة، لا تبحث أبداً.
+
+## خريطة الأسئلة (أداة واحدة):
+- إحصائيات / كم طالب → get_statistics
+- بحث عن طالب باسمه → search_students (لخّص النتائج فقط)
+- مواد/كام مادة مسجل → list_enrollments(student_id) ← count في النتيجة هو الإجابة
+- درجات طالب → get_student_grades(student_id)
+- حضور طالب → get_student_attendance(student_id)
+- ماليات طالب → get_student_financial(student_id)
+- قائمة المواد/المقررات → list_courses
+- قائمة القاعات → list_rooms
+- إعلانات → list_announcements
+- طلبات تسجيل → list_registration_requests
+- طلاب محجوبون → list_student_blocks
+- لجان → list_committees
+- موظفين → list_staff
+- مستخدمي النظام → list_users
+
+## خريطة التعديلات:
+- عدّل أي بيانات/GPA/حالة طالب [بكوده] → update_student مباشرة (خطوة واحدة)
+- عدّل أي بيانات/GPA/حالة طالب [باسمه] → search_students ثم update_student (خطوتان)
+- عدّل درجة مادة → get_student_grades ثم update_grade (لا تُنشئ طالباً)
+- حجب طالب [بكوده] → block_student مباشرة
+- رفع حجب → unblock_student مباشرة
+- أضف/عدّل إعلان → create_announcement / update_announcement
+- قبول/رفض طلب تسجيل → update_registration_request
+- تسجيل مادة → create_enrollment
+- عدّل قاعة → update_room / تعديل لجنة → update_committee
+
+## قواعد ذهبية:
+1. بعد أي أداة → أجب فوراً بنص. لا أداة ثانية إلا لو ضروري حتماً.
+2. count في أي نتيجة = العدد المطلوب مباشرة.
+3. تحدث بالعربية دائماً.
+4. بعد أي تعديل، أكّد في جملة واحدة قصيرة.
 """
 
 STUDENT_SYSTEM = """أنت مساعد للطلاب في نظام DUMLIS — تعرض بيانات الطالب المسجّل فقط (قراءة فقط).
@@ -282,7 +307,7 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         for f in ("name","status","fees_status","phone","email","level","gpa","city"):
             if args.get(f) is not None: setattr(s, f, args[f])
         db.commit()
-        return {"success": True, "student": _row(s)}
+        return {"success": True, "student_id": s.student_id, "gpa": s.gpa, "status": s.status}
 
     elif name == "delete_student":
         s = db.get(models.Student, args["student_id"])
@@ -316,7 +341,8 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         if args.get("faculty_id"): q = q.filter(models.StudentBlock.faculty_id == args["faculty_id"])
         if args.get("status"):     q = q.filter(models.StudentBlock.status == args["status"])
         rows = q.limit(50).all()
-        return {"count": len(rows), "blocks": [_row(r) for r in rows]}
+        BLOCK_KEYS = ["id","student_id","reason","status","blocked_at"]
+        return {"count": len(rows), "blocks": [_row(r, BLOCK_KEYS) for r in rows]}
 
     # ── Grades ────────────────────────────────────────────────────────────────
     elif name == "get_student_grades":
@@ -346,8 +372,7 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         rows = q.order_by(models.AttendanceRecord.attendance_date.desc()).limit(100).all()
         present = sum(1 for r in rows if r.status == "حاضر")
         return {"total": len(rows), "present": present, "absent": len(rows)-present,
-                "rate": round(present/len(rows)*100,1) if rows else 0,
-                "records": [_row(r) for r in rows[:30]]}
+                "rate": round(present/len(rows)*100,1) if rows else 0}
 
     elif name == "update_attendance":
         r = db.get(models.AttendanceRecord, args["attendance_id"])
@@ -363,8 +388,10 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
             models.FinancialRecord.student_id == args["student_id"]).all()
         total_due  = sum(float(r.amount or 0) for r in rows)
         total_paid = sum(float(r.paid_amount or 0) for r in rows)
-        return {"total_due": total_due, "total_paid": total_paid,
-                "remaining": total_due-total_paid, "records": [_row(r) for r in rows]}
+        FIN_KEYS = ["id","academic_year","amount","paid_amount","status","receipt_no"]
+        return {"count": len(rows), "total_due": total_due, "total_paid": total_paid,
+                "remaining": round(total_due-total_paid, 2),
+                "records": [_row(r, FIN_KEYS) for r in rows]}
 
     elif name == "update_financial_record":
         r = db.get(models.FinancialRecord, args["record_id"])
@@ -381,7 +408,8 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         if args.get("status"):        q = q.filter(models.FinancialRecord.status == args["status"])
         if args.get("academic_year"): q = q.filter(models.FinancialRecord.academic_year == args["academic_year"])
         rows = q.limit(args.get("limit", 50)).all()
-        return {"count": len(rows), "records": [_row(r) for r in rows]}
+        FIN_KEYS = ["id","student_id","academic_year","amount","paid_amount","status","receipt_no"]
+        return {"count": len(rows), "records": [_row(r, FIN_KEYS) for r in rows]}
 
     # ── Enrollments ───────────────────────────────────────────────────────────
     elif name == "list_enrollments":
@@ -391,7 +419,8 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         if args.get("semester"):   q = q.filter(models.Enrollment.semester == args["semester"])
         if args.get("faculty_id"): q = q.filter(models.Enrollment.faculty_id == args["faculty_id"])
         rows = q.limit(args.get("limit", 50)).all()
-        return {"count": len(rows), "enrollments": [_row(r) for r in rows]}
+        ENROLL_KEYS = ["enrollment_id", "student_id", "course_id", "semester", "status"]
+        return {"count": len(rows), "enrollments": [_row(r, ENROLL_KEYS) for r in rows]}
 
     elif name == "create_enrollment":
         e = models.Enrollment(
@@ -424,7 +453,8 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         if args.get("level"):      q = q.filter(models.Course.level == args["level"])
         if args.get("semester"):   q = q.filter(models.Course.semester == args["semester"])
         rows = q.limit(args.get("limit", 50)).all()
-        return {"count": len(rows), "courses": [_row(c) for c in rows]}
+        COURSE_KEYS = ["id","name","level","credit_hours","semester","course_type"]
+        return {"count": len(rows), "courses": [_row(c, COURSE_KEYS) for c in rows]}
 
     elif name == "create_course":
         c = models.Course(**{k: v for k, v in args.items() if v is not None})
@@ -462,7 +492,8 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         if args.get("room_type"): q = q.filter(models.Room.room_type == args["room_type"])
         if args.get("status"):    q = q.filter(models.Room.status == args["status"])
         rows = q.limit(50).all()
-        return {"count": len(rows), "rooms": [_row(r) for r in rows]}
+        ROOM_KEYS = ["id","name","capacity","room_type","status"]
+        return {"count": len(rows), "rooms": [_row(r, ROOM_KEYS) for r in rows]}
 
     elif name == "update_room":
         r = db.get(models.Room, args["room_id"])
@@ -478,7 +509,8 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         if args.get("faculty_id"): q = q.filter(models.Committee.faculty_id == args["faculty_id"])
         if args.get("semester"):   q = q.filter(models.Committee.semester == args["semester"])
         rows = q.limit(50).all()
-        return {"count": len(rows), "committees": [_row(c) for c in rows]}
+        COM_KEYS = ["id","faculty_id","semester","supervisor","status","exam_date"]
+        return {"count": len(rows), "committees": [_row(c, COM_KEYS) for c in rows]}
 
     elif name == "update_committee":
         c = db.get(models.Committee, args["committee_id"])
@@ -495,7 +527,8 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         if args.get("faculty_id"): q = q.filter(models.RegistrationRequest.faculty_id == args["faculty_id"])
         if args.get("status"):     q = q.filter(models.RegistrationRequest.status == args["status"])
         rows = q.order_by(models.RegistrationRequest.created_at.desc()).limit(args.get("limit", 50)).all()
-        return {"count": len(rows), "requests": [_row(r) for r in rows]}
+        REQ_KEYS = ["id","student_id","request_type","status","created_at","admin_response"]
+        return {"count": len(rows), "requests": [_row(r, REQ_KEYS) for r in rows]}
 
     elif name == "update_registration_request":
         r = db.get(models.RegistrationRequest, args["request_id"])
@@ -510,7 +543,8 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         q = db.query(models.Announcement).filter(models.Announcement.is_active == True)
         if args.get("faculty_id"): q = q.filter(models.Announcement.faculty_id == args["faculty_id"])
         rows = q.order_by(models.Announcement.created_at.desc()).limit(20).all()
-        return {"count": len(rows), "announcements": [_row(a) for a in rows]}
+        ANN_KEYS = ["id","title","priority","created_at","faculty_id"]
+        return {"count": len(rows), "announcements": [_row(a, ANN_KEYS) for a in rows]}
 
     elif name == "create_announcement":
         a = models.Announcement(
@@ -543,15 +577,15 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         if args.get("role"):       q = q.filter(models.User.role == args["role"])
         rows = q.limit(50).all()
         # exclude hashed_password
-        return {"count": len(rows), "users": [
-            {k: v for k, v in _row(u).items() if k != "hashed_password"} for u in rows
-        ]}
+        USER_KEYS = ["id","username","role","faculty_id","is_active"]
+        return {"count": len(rows), "users": [_row(u, USER_KEYS) for u in rows]}
 
     elif name == "list_staff":
         q = db.query(models.Staff)
         if args.get("faculty_id"): q = q.filter(models.Staff.faculty_id == args["faculty_id"])
         rows = q.limit(50).all()
-        return {"count": len(rows), "staff": [_row(s) for s in rows]}
+        STAFF_KEYS = ["id","name","faculty_id","department_id","position","email"]
+        return {"count": len(rows), "staff": [_row(s, STAFF_KEYS) for s in rows]}
 
     # ── Statistics & Logs ─────────────────────────────────────────────────────
     elif name == "get_statistics":
@@ -568,7 +602,8 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         if args.get("faculty_id"):  q = q.filter(models.ActivityLog.faculty_id == args["faculty_id"])
         if args.get("entity_type"): q = q.filter(models.ActivityLog.entity_type == args["entity_type"])
         rows = q.order_by(models.ActivityLog.performed_at.desc()).limit(args.get("limit", 20)).all()
-        return {"count": len(rows), "logs": [_row(r) for r in rows]}
+        LOG_KEYS = ["id","entity_type","action","performed_at","performed_by"]
+        return {"count": len(rows), "logs": [_row(r, LOG_KEYS) for r in rows]}
 
     # ── Student-scoped (own data, read-only) ──────────────────────────────────
     elif name in {"get_my_profile","get_my_grades","get_my_attendance",
@@ -579,33 +614,40 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         sid = student.student_id
 
         if name == "get_my_profile":
-            return _row(student)
+            return _row(student, STUDENT_KEYS)
         elif name == "get_my_grades":
             q = db.query(models.Grade).filter(models.Grade.student_id == sid)
             if args.get("semester"): q = q.filter(models.Grade.semester == args["semester"])
-            return {"grades": [_row(g) for g in q.all()]}
+            rows = q.all()
+            return {"count": len(rows), "grades": [_row(g, ["id","course_id","semester","midterm","final_exam","total","grade_letter","grade_points"]) for g in rows]}
         elif name == "get_my_attendance":
             q = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.student_id == sid)
             if args.get("course_id"): q = q.filter(models.AttendanceRecord.course_id == args["course_id"])
-            rows = q.order_by(models.AttendanceRecord.attendance_date.desc()).limit(50).all()
+            rows = q.limit(100).all()
             present = sum(1 for r in rows if r.status == "حاضر")
-            return {"total": len(rows), "present": present, "absent": len(rows)-present, "records": [_row(r) for r in rows]}
+            return {"total": len(rows), "present": present, "absent": len(rows)-present,
+                    "rate": round(present/len(rows)*100, 1) if rows else 0}
         elif name == "get_my_financial":
             rows = db.query(models.FinancialRecord).filter(models.FinancialRecord.student_id == sid).all()
             total_due  = sum(float(r.amount or 0) for r in rows)
             total_paid = sum(float(r.paid_amount or 0) for r in rows)
-            return {"total_due": total_due, "total_paid": total_paid, "remaining": total_due-total_paid, "records": [_row(r) for r in rows]}
+            FIN_KEYS = ["id","academic_year","amount","paid_amount","status"]
+            return {"count": len(rows), "total_due": total_due, "total_paid": total_paid,
+                    "remaining": round(total_due-total_paid, 2),
+                    "records": [_row(r, FIN_KEYS) for r in rows]}
         elif name == "get_my_schedule":
             q = db.query(models.CourseSchedule).join(
                 models.Enrollment,
                 (models.Enrollment.course_id == models.CourseSchedule.course_id) &
                 (models.Enrollment.student_id == sid))
             if args.get("semester"): q = q.filter(models.CourseSchedule.semester == args["semester"])
-            return {"schedule": [_row(s) for s in q.all()]}
+            SCH_KEYS = ["course_id","day","start_time","end_time","room_id"]
+            return {"schedule": [_row(s, SCH_KEYS) for s in q.all()]}
         elif name == "get_my_enrollments":
             q = db.query(models.Enrollment).filter(models.Enrollment.student_id == sid)
             if args.get("semester"): q = q.filter(models.Enrollment.semester == args["semester"])
-            return {"enrollments": [_row(e) for e in q.all()]}
+            rows = q.all()
+            return {"count": len(rows), "enrollments": [_row(e, ["course_id","semester","status"]) for e in rows]}
 
     else:
         return {"error": f"أداة غير معروفة: {name}"}
