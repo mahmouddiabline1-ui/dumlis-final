@@ -24,11 +24,19 @@ ADMIN_ROLES = {"super_admin", "faculty_admin", "student_affairs"}
 
 # ── Provider registry (tried in order, skip on 429 / auth error) ──────────────
 PROVIDERS = [
-    # ── Groq: كل موديل له limit مستقل (100K أو 500K token/يوم) ──────────────
+    # ── Cerebras: أسرع inference (hardware مخصص) ─────────────────────────────
+    {"env": "CEREBRAS_API_KEY",  "base_url": "https://api.cerebras.ai/v1",
+     "model": "llama3.3-70b",               "name": "Cerebras-70B"},
+    {"env": "CEREBRAS_API_KEY",  "base_url": "https://api.cerebras.ai/v1",
+     "model": "llama3.1-8b",               "name": "Cerebras-8B"},
+
+    # ── Groq: سريع وموثوق ────────────────────────────────────────────────────
     {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
      "model": "llama-3.3-70b-versatile",   "name": "Groq-3.3-70B"},
     {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
      "model": "llama-3.1-70b-versatile",   "name": "Groq-3.1-70B"},
+    {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
+     "model": "llama-3.1-8b-instant",       "name": "Groq-8B"},
 
     # ── Gemini: 1M token/يوم مجاناً ──────────────────────────────────────────
     {"env": "GEMINI_API_KEY",    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
@@ -36,19 +44,9 @@ PROVIDERS = [
     {"env": "GEMINI_API_KEY",    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
      "model": "gemini-1.5-flash",           "name": "Gemini-1.5-Flash"},
 
-    # ── Cerebras: موديلان بـlimits مستقلة ────────────────────────────────────
-    {"env": "CEREBRAS_API_KEY",  "base_url": "https://api.cerebras.ai/v1",
-     "model": "llama3.3-70b",               "name": "Cerebras-70B"},
-    {"env": "CEREBRAS_API_KEY",  "base_url": "https://api.cerebras.ai/v1",
-     "model": "llama3.1-8b",               "name": "Cerebras-8B"},
-
-    # ── SambaNova: 70B فقط (405B غير متاح على SambaNova Cloud) ─────────────
+    # ── SambaNova: fallback ───────────────────────────────────────────────────
     {"env": "SAMBANOVA_API_KEY", "base_url": "https://api.sambanova.ai/v1",
      "model": "Meta-Llama-3.3-70B-Instruct","name": "SambaNova-70B"},
-
-    # ── Groq آخر ملجأ: 500K token/يوم ───────────────────────────────────────
-    {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
-     "model": "llama-3.1-8b-instant",       "name": "Groq-8B"},
 ]
 _provider_clients: dict[str, AsyncOpenAI] = {}
 _blacklisted_until: dict[str, float] = {}   # provider name → unix timestamp
@@ -77,12 +75,15 @@ def _get_client(provider: dict) -> Optional[AsyncOpenAI]:
         base_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"
     cache_key = f"{provider['env']}:{base_url}"
     if cache_key not in _provider_clients:
-        _provider_clients[cache_key] = AsyncOpenAI(api_key=key, base_url=base_url)
+        _provider_clients[cache_key] = AsyncOpenAI(api_key=key, base_url=base_url, timeout=12.0)
     return _provider_clients[cache_key]
 
 
 def _should_skip_provider(e: Exception) -> bool:
     """Return True for any API-level error that means 'try next provider'."""
+    from openai import APITimeoutError, APIConnectionError
+    if isinstance(e, (APITimeoutError, APIConnectionError)):
+        return True
     s = str(e).lower()
     return any(x in s for x in [
         "429", "rate_limit", "quota",
@@ -94,6 +95,7 @@ def _should_skip_provider(e: Exception) -> bool:
         "did not match schema",
         "aierror", "bad input", "onematch", "oneof",
         "type mismatch", "required properties",
+        "timeout", "timed out", "connection",
     ])
 
 
