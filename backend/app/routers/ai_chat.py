@@ -207,9 +207,24 @@ ADMIN_SYSTEM_BASE = """أنت مساعد إداري ذكي لنظام DUMLIS ا�
 - مثال: "سجله مادة" بدون تحديد المادة → اسأل: "أي مادة تريد تسجيله فيها؟"
 - مثال: "عدل درجته" بدون تحديد الدرجة → اسأل: "كم الدرجة الجديدة؟"
 
+## 📅 جداول الامتحانات (اللجان):
+- اللجنة = قاعة امتحان لمادة معينة، بها: اسم، مادة، قاعة، تاريخ، وقت، مشرف، سعة
+- لعرض الجداول: get_system_info("committees")
+- لإنشاء جدول جديد: modify_data(entity="committee", action="create", fields={name, course_id, room_id, exam_date, exam_time, supervisor, capacity, semester})
+  → لو room_id مش متوفر: اعرض get_system_info("rooms") أولاً واسأل المستخدم يختار
+- لتعديل: modify_data(entity="committee", action="update", id=..., fields={...})
+- لحذف: modify_data(entity="committee", action="delete", id=...)
+- بعد الإنشاء/التعديل → أكد بتفاصيل اللجنة: الاسم، المادة، القاعة، التاريخ، الوقت
+
+## 📝 إضافة درجات:
+- لإضافة درجة: modify_data(entity="grade", action="create", fields={student_id, course_id, semester, midterm, final_exam, total, grade_letter})
+- لتعديل درجة موجودة: modify_data(entity="grade", action="update", id=grade_id, fields={...})
+  → الـgrade_id موجود في نتيجة get_student_data
+- بعد الإضافة/التعديل → أكد: اسم الطالب (لو معروف)، المادة، الدرجة، التقدير
+
 ## 🚫 لا تخترع بيانات أبداً:
 - لو الأداة ما رجعتش بيانات كافية → قل بصراحة "لا توجد بيانات متاحة"
-- لو مفيش أداة للموضوع المطلوب (جداول امتحانات، مواعيد، تفاصيل جداول...) → قل "هذه البيانات غير متوفرة في النظام حالياً"
+- لو مفيش أداة للموضوع المطلوب → قل "هذه البيانات غير متوفرة في النظام حالياً"
 - الأرقام والأسماء اللي بتقولها لازم تيجي من نتيجة أداة حقيقية أو من السياق المحمّل أعلاه — مش من مخيلتك
 - لو مش متأكد → اسأل أو قل "لا أعلم"
 """
@@ -465,6 +480,8 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
 
         # ── grade ─────────────────────────────────────────────────────────────
         elif entity == "grade":
+            GRADE_SUMMARY_KEYS = ["id","student_id","course_id","semester",
+                                   "midterm","final_exam","total","grade_letter","grade_points"]
             if action == "create":
                 g = models.Grade(
                     student_id=fields.get("student_id", eid),
@@ -474,8 +491,8 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
                        ("midterm","final_exam","assignments","oral","practical",
                         "total","grade_letter","grade_points") if k in fields}
                 )
-                db.add(g); db.commit()
-                return {"success": True, "grade_id": g.id}
+                db.add(g); db.commit(); db.refresh(g)
+                return {"success": True, "action": "created", "grade": _row(g, GRADE_SUMMARY_KEYS)}
             else:
                 g = db.get(models.Grade, _int(eid))
                 if not g: return {"error": f"الدرجة {eid} غير موجودة"}
@@ -483,7 +500,7 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
                           "total","grade_letter","grade_points"):
                     if fields.get(f) is not None: setattr(g, f, fields[f])
                 db.commit()
-                return {"success": True, "grade": _row(g)}
+                return {"success": True, "action": "updated", "grade": _row(g, GRADE_SUMMARY_KEYS)}
 
         # ── enrollment ────────────────────────────────────────────────────────
         elif entity == "enrollment":
@@ -603,15 +620,70 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
 
         # ── committee ─────────────────────────────────────────────────────────
         elif entity == "committee":
-            c = db.get(models.Committee, _int(eid))
-            if not c: return {"error": "اللجنة غير موجودة"}
-            if fields.get("supervisor"): c.supervisor = fields["supervisor"]
-            if fields.get("status"):     c.status     = fields["status"]
-            if fields.get("exam_date"):
-                try: c.exam_date = date.fromisoformat(fields["exam_date"])
-                except ValueError: pass
-            db.commit()
-            return {"success": True}
+            if action == "create":
+                room_id = fields.get("room_id")
+                if not room_id:
+                    return {"error": "يجب تحديد room_id (القاعة). استخدم get_system_info('rooms') لعرض القاعات المتاحة."}
+                c = models.Committee(
+                    faculty_id=fields.get("faculty_id", user.faculty_id),
+                    name=fields.get("name", ""),
+                    course_id=fields.get("course_id"),
+                    room_id=room_id,
+                    capacity=_int(fields.get("capacity"), 30),
+                    supervisor=fields.get("supervisor"),
+                    semester=fields.get("semester"),
+                    status=fields.get("status", "active"),
+                )
+                if fields.get("exam_date"):
+                    try: c.exam_date = date.fromisoformat(fields["exam_date"])
+                    except ValueError: pass
+                if fields.get("exam_time"):
+                    try:
+                        from datetime import time as dtime
+                        parts = fields["exam_time"].split(":")
+                        c.exam_time = dtime(int(parts[0]), int(parts[1]))
+                    except Exception: pass
+                db.add(c); db.commit()
+                return {
+                    "success": True, "committee_id": c.id,
+                    "name": c.name, "course_id": c.course_id,
+                    "room_id": c.room_id, "capacity": c.capacity,
+                    "exam_date": str(c.exam_date) if c.exam_date else None,
+                    "exam_time": str(c.exam_time) if c.exam_time else None,
+                    "supervisor": c.supervisor, "semester": c.semester,
+                }
+            elif action == "delete":
+                c = db.get(models.Committee, _int(eid))
+                if not c: return {"error": "اللجنة غير موجودة"}
+                db.delete(c); db.commit()
+                return {"success": True, "deleted_committee_id": eid}
+            else:
+                c = db.get(models.Committee, _int(eid))
+                if not c: return {"error": "اللجنة غير موجودة"}
+                if fields.get("name"):       c.name       = fields["name"]
+                if fields.get("supervisor"): c.supervisor = fields["supervisor"]
+                if fields.get("status"):     c.status     = fields["status"]
+                if fields.get("capacity"):   c.capacity   = _int(fields["capacity"])
+                if fields.get("course_id"):  c.course_id  = fields["course_id"]
+                if fields.get("room_id"):    c.room_id    = fields["room_id"]
+                if fields.get("semester"):   c.semester   = fields["semester"]
+                if fields.get("exam_date"):
+                    try: c.exam_date = date.fromisoformat(fields["exam_date"])
+                    except ValueError: pass
+                if fields.get("exam_time"):
+                    try:
+                        from datetime import time as dtime
+                        parts = fields["exam_time"].split(":")
+                        c.exam_time = dtime(int(parts[0]), int(parts[1]))
+                    except Exception: pass
+                db.commit()
+                return {
+                    "success": True, "committee_id": c.id,
+                    "name": c.name, "course_id": c.course_id,
+                    "exam_date": str(c.exam_date) if c.exam_date else None,
+                    "exam_time": str(c.exam_time) if c.exam_time else None,
+                    "supervisor": c.supervisor,
+                }
 
         return {"error": f"entity غير معروف: '{entity}'. الخيارات: student|grade|enrollment|financial|attendance|announcement|request|room|course|committee"}
 
