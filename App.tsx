@@ -8,10 +8,11 @@ import AcademicStructureManagement from './components/AcademicStructureManagemen
 import LoginPage from './components/LoginPage';
 import StudentAffairsAdmin from './components/StudentAffairsAdmin';
 import DatabaseMigrator from './components/DatabaseMigrator';
+import AiChat from './components/AiChat';
 import { Bell, Search, User as UserIcon, Menu, LogOut, ChevronDown, Building2 } from 'lucide-react';
 import { UserRole, User } from './types';
 import { authApi } from './api';
-import { loadDynamicOptions, refreshDynamicOptions } from './data/formOptions';
+import { loadDynamicOptions } from './data/formOptions';
 import { lookupApi } from './lookupApi';
 import { FacultyContextProvider } from './contexts/FacultyContext';
 
@@ -31,9 +32,6 @@ function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const isFirstRender = useRef(true);
 
-  // Dynamic faculties — loaded from API, fallback to static FACULTIES
-  const [dynamicFaculties, setDynamicFaculties] = useState(FACULTIES);
-
   // Super Admin Specific State — restore selected faculty from localStorage
   const [selectedFacultyId, setSelectedFacultyId] = useState<string | null>(
     () => localStorage.getItem('lastSelectedFacultyId') || null
@@ -50,30 +48,7 @@ function App() {
   const [globalSearchTerm, setGlobalSearchTerm] = useState('');
   const [searchSource, setSearchSource] = useState<string>('all'); // 'all', 'students', 'courses', 'programs', 'decisions', 'departments'
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
-  const [searchFocused, setSearchFocused] = useState(false);
   const searchDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Flat list of all navigable pages for autocomplete
-  const searchablePages = React.useMemo(() =>
-    ADMIN_NAVIGATION.flatMap(tab =>
-      tab.groups.flatMap(group =>
-        group.items.map(item => ({
-          id: item.id,
-          label: item.label,
-          tabId: tab.id,
-          tabLabel: tab.label,
-        }))
-      )
-    ), []);
-
-  // Live suggestions filtered by what the user typed
-  const liveSuggestions = React.useMemo(() => {
-    if (!globalSearchTerm.trim() || globalSearchTerm.length < 1) return [];
-    const term = globalSearchTerm.trim().toLowerCase();
-    return searchablePages.filter(p =>
-      p.label.toLowerCase().includes(term) || p.id.toLowerCase().includes(term)
-    ).slice(0, 8);
-  }, [globalSearchTerm, searchablePages]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -101,26 +76,6 @@ function App() {
   // Load dynamic form options only AFTER authentication is confirmed
   useEffect(() => {
     if (isAuthenticated) {
-      // Load faculties from API and merge with static config (for real student counts)
-      lookupApi.getFaculties().then((apiFaculties: any[]) => {
-        if (apiFaculties && apiFaculties.length > 0) {
-          const FACULTY_ICONS: Record<string, string> = {
-            FCAI: '💻', FSC: '🔬', FEN: '⚙️', FED: '📚', PHR: '💊', LAW: '⚖️',
-          };
-          const FACULTY_COLORS: Record<string, string> = {
-            FCAI: 'bg-blue-600', FSC: 'bg-green-600', FEN: 'bg-purple-600',
-            FED: 'bg-yellow-600', PHR: 'bg-red-600', LAW: 'bg-orange-600',
-          };
-          setDynamicFaculties(apiFaculties.map((f: any) => ({
-            id: f.id,
-            name: f.name,
-            icon: f.icon || FACULTY_ICONS[f.id] || '🏫',
-            studentCount: f.student_count || 0,
-            staffCount: f.staff_count || 0,
-            color: f.color || FACULTY_COLORS[f.id] || 'bg-gray-600',
-          })));
-        }
-      }).catch(() => {});
       loadDynamicOptions().then(() => {
         // After fetching faculties, validate the saved faculty ID
         const restoredFaculty = localStorage.getItem('lastSelectedFacultyId');
@@ -162,11 +117,7 @@ function App() {
     } else {
       localStorage.removeItem('lastSelectedFacultyId');
     }
-    // Refresh faculty-specific form options when faculty changes
-    if (isAuthenticated) {
-      refreshDynamicOptions(selectedFacultyId).catch(() => {});
-    }
-  }, [selectedFacultyId, isAuthenticated]);
+  }, [selectedFacultyId]);
 
   // Persist academic structure view state
   useEffect(() => {
@@ -259,21 +210,8 @@ function App() {
   // Global Search Handler
   const handleGlobalSearch = (searchTerm: string) => {
     if (!searchTerm.trim()) return;
-    setSearchFocused(false);
-    setShowSearchDropdown(false);
 
-    // If there's a matching page, navigate there directly
-    const term = searchTerm.trim().toLowerCase();
-    const match = searchablePages.find(p =>
-      p.label.toLowerCase().includes(term) || p.id.toLowerCase() === term
-    );
-    if (match) {
-      setActiveTabId(match.tabId);
-      setActiveSubItemId(match.id);
-      return;
-    }
-
-    // Fallback: navigate by source category
+    // Navigate based on selected search source
     switch (searchSource) {
       case 'students':
         setActiveTabId('students');
@@ -291,10 +229,17 @@ function App() {
         setActiveTabId('departments');
         setActiveSubItemId('view_departments');
         break;
+      case 'decisions':
+        setActiveTabId('decisions');
+        setActiveSubItemId('decision_list');
+        break;
       default:
+        // 'all' - search in students by default
         setActiveTabId('students');
         setActiveSubItemId('advanced_student_search');
     }
+
+    setShowSearchDropdown(false);
   };
 
   // Search sources configuration
@@ -368,6 +313,7 @@ function App() {
           <StudentAffairsAdmin facultyId={currentUser.faculty || null} />
         </main>
         </div>
+        <AiChat userRole={currentUser.role} authToken={localStorage.getItem('authToken')} />
       </FacultyContextProvider>
     );
   }
@@ -427,6 +373,7 @@ function App() {
               />
             </main>
           </div>
+          <AiChat userRole={currentUser.role} authToken={localStorage.getItem('authToken')} />
         </FacultyContextProvider>
       );
     }
@@ -464,6 +411,7 @@ function App() {
             />
           </main>
         </div>
+        <AiChat userRole={currentUser.role} authToken={localStorage.getItem('authToken')} />
       </FacultyContextProvider>
     );
   }
@@ -506,7 +454,7 @@ function App() {
                   </p>
                   {selectedFacultyId && (
                     <span className="text-[10px] px-1.5 py-0.5 bg-gold-500 text-primary-900 rounded-sm font-bold">
-                      {dynamicFaculties.find(f => f.id === selectedFacultyId)?.name || selectedFacultyId}
+                      {FACULTIES.find(f => f.id === selectedFacultyId)?.name || selectedFacultyId}
                     </span>
                   )}
                 </div>
@@ -550,17 +498,16 @@ function App() {
                 <input
                   type="text"
                   value={globalSearchTerm}
-                  onChange={(e) => {
-                    setGlobalSearchTerm(e.target.value);
-                    setShowSearchDropdown(false);
-                  }}
+                  onChange={(e) => setGlobalSearchTerm(e.target.value)}
                   onKeyDown={handleSearchKeyPress}
-                  onFocus={() => {
-                    setShowSearchDropdown(false);
-                    setSearchFocused(true);
-                  }}
-                  onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
-                  placeholder="ابحث عن صفحة، طالب، مقرر..."
+                  onFocus={() => setShowSearchDropdown(false)}
+                  placeholder={
+                    currentUser?.role === 'student' 
+                      ? "بحث في الخدمات..." 
+                      : searchSource === 'all'
+                      ? "بحث في الكل..."
+                      : `بحث في ${searchSources.find(s => s.id === searchSource)?.label}...`
+                  }
                   className="w-full bg-primary-800/50 border border-primary-700 text-primary-100 text-sm rounded-full pl-4 pr-24 py-2 focus:outline-none focus:bg-primary-800 focus:border-gold-500/50 transition-all placeholder:text-primary-400"
                 />
                 <button
@@ -569,29 +516,6 @@ function App() {
                 >
                   <Search className="w-4 h-4" />
                 </button>
-
-                {/* Live Suggestions Dropdown */}
-                {searchFocused && liveSuggestions.length > 0 && (
-                  <div className="absolute top-full mt-2 right-0 w-full bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
-                    {liveSuggestions.map((page) => (
-                      <button
-                        key={`${page.tabId}-${page.id}`}
-                        onMouseDown={() => {
-                          setActiveTabId(page.tabId);
-                          setActiveSubItemId(page.id);
-                          setSearchFocused(false);
-                        }}
-                        className="w-full px-4 py-2.5 text-right flex items-center justify-between gap-3 hover:bg-primary-50 transition-colors border-b border-gray-100 last:border-0"
-                      >
-                        <div className="flex flex-col items-start">
-                          <span className="text-sm font-medium text-gray-900">{page.label}</span>
-                          <span className="text-[10px] text-gray-400">{page.tabLabel}</span>
-                        </div>
-                        <Search className="w-3.5 h-3.5 text-gray-300 shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
 
@@ -608,7 +532,7 @@ function App() {
                     <Building2 className="w-4 h-4" />
                     <span className="hidden md:inline">
                       {selectedFacultyId
-                        ? dynamicFaculties.find(f => f.id === selectedFacultyId)?.name || 'الكل'
+                        ? FACULTIES.find(f => f.id === selectedFacultyId)?.name || 'الكل'
                         : 'جميع الكليات'}
                     </span>
                     <ChevronDown className={`w-4 h-4 transition-transform ${showFacultyMenu ? 'rotate-180' : ''}`} />
@@ -628,7 +552,7 @@ function App() {
                       </button>
 
                       {/* Individual Faculties */}
-                      {dynamicFaculties.map(faculty => (
+                      {FACULTIES.map(faculty => (
                         <button
                           key={faculty.id}
                           onClick={() => handleFacultySwitcher(faculty.id)}
@@ -644,23 +568,13 @@ function App() {
                 </div>
               )}
 
-              {currentUser?.role === 'student' ? (
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-2 bg-red-500/20 hover:bg-red-500/40 text-red-200 hover:text-white border border-red-400/40 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>خروج</span>
-                </button>
-              ) : (
-                <button
-                  onClick={handleLogout}
-                  className="p-2 text-primary-200 hover:text-red-400 hover:bg-primary-800 rounded-full transition-colors"
-                  title="تسجيل خروج"
-                >
-                  <LogOut className="w-5 h-5" />
-                </button>
-              )}
+              <button
+                onClick={handleLogout}
+                className="p-2 text-primary-200 hover:text-red-400 hover:bg-primary-800 rounded-full transition-colors"
+                title="تسجيل خروج"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
 
               <button className="p-2 text-primary-200 hover:text-white hover:bg-primary-800 rounded-full transition-colors relative">
                 <Bell className="w-5 h-5" />
@@ -672,7 +586,7 @@ function App() {
                   <p className="text-sm font-medium text-white">{currentUser?.name}</p>
                   <p className="text-xs text-primary-300">
                     {currentUser?.role === 'super_admin' ? 'رئيس الجامعة' :
-                      currentUser?.role === 'faculty_admin' ? (dynamicFaculties.find(f => f.id === selectedFacultyId)?.name || 'مدير النظام') : 
+                      currentUser?.role === 'faculty_admin' ? (FACULTIES.find(f => f.id === selectedFacultyId)?.name || 'مدير النظام') : 
                       currentUser?.role === 'student_affairs' ? 'موظف شؤون الطلاب' : 'طالب مقيد'}
                   </p>
                 </div>
@@ -732,7 +646,6 @@ function App() {
             activeTab={activeTab}
             activeSubItem={activeSubItemId}
             onSelectSubItem={setActiveSubItemId}
-            userRole={currentUser?.role}
           />
         )}
 
@@ -749,6 +662,7 @@ function App() {
         </main>
       </div>
     </div>
+    <AiChat userRole={currentUser?.role ?? null} authToken={localStorage.getItem('authToken')} />
     </FacultyContextProvider>
   );
 }

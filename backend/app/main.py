@@ -16,7 +16,7 @@ from app.routers import (
     programs, regulations, academic_rules, auth,
     student_requirements, student_documents, activity_log, users,
     course_equivalences, system_settings, survey_rules, staff,
-    academic_calendar, announcements, fee_setup
+    academic_calendar, announcements, ai_chat
 )
 
 # ── Logging Setup ────────────────────────────────────────────────────────────
@@ -34,9 +34,8 @@ app = FastAPI(
         "schedules, rooms, committees, and registration requests."
     ),
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url="/docs" if os.getenv("DEBUG") == "True" else None,
+    redoc_url="/redoc" if os.getenv("DEBUG") == "True" else None,
 )
 
 # ── Security Middleware ──────────────────────────────────────────────────────
@@ -60,21 +59,18 @@ if os.getenv("APP_ENV") == "production":
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
 # CORS Middleware (added last so it executes first)
-allowed_origins_str = os.getenv(
+ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3006,http://localhost:5173,https://dumlis-final.railway.app,https://dumlis-final-production.up.railway.app,https://dumlis-final.mahmouddiabline1.workers.dev,https://dumlis-final1.mahmouddiabline1.workers.dev"
-)
-ALLOWED_ORIGINS = [origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()]
-logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
+    "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3006,http://localhost:5173"
+).split(",")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS else ["*"],
-    allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["*"],
-    max_age=3600,
+    max_age=600,
 )
 
 # ── Global Exception Handler ─────────────────────────────────────────────────
@@ -91,9 +87,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # ── Routers ───────────────────────────────────────────────────────
-logger.info("Loading routers...")
 app.include_router(auth.router,                   prefix="/auth",                   tags=["Authentication"])
-logger.info("Auth router loaded")
 app.include_router(faculties.router,              prefix="/faculties",              tags=["Faculties"])
 app.include_router(departments.router,            prefix="/departments",            tags=["Departments"])
 app.include_router(students.router,               prefix="/students",               tags=["Students"])
@@ -119,21 +113,19 @@ app.include_router(student_documents.router,      prefix="/student-documents",  
 app.include_router(activity_log.router,            prefix="/activity-logs",          tags=["Activity Logs"])
 app.include_router(users.router,                   prefix="/users",                  tags=["User Management"])
 app.include_router(system_settings.router,      prefix="/system-settings",        tags=["System Settings"])
-app.include_router(fee_setup.router,            prefix="/fee-setup",              tags=["Fee Setup"])
 app.include_router(survey_rules.router,         prefix="/survey-rules",           tags=["Survey Rules"])
 app.include_router(staff.router,                 prefix="/staff",                  tags=["Staff"])
 app.include_router(academic_calendar.router,    prefix="/academic-calendar",      tags=["Academic Calendar"])
 app.include_router(announcements.router,        prefix="/announcements",          tags=["Announcements"])
+app.include_router(ai_chat.router,              prefix="/ai",                     tags=["AI Chat"])
 
 
 @app.get("/", tags=["Health"])
 def root():
-    logger.info("Root endpoint called - API is responsive")
     return {
         "status": "ok",
         "system": "DUMLIS API v1.0.0",
-        "environment": os.getenv("APP_ENV", "development"),
-        "routers_loaded": "yes"
+        "environment": os.getenv("APP_ENV", "development")
     }
 
 
