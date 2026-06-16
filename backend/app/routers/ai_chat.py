@@ -47,9 +47,7 @@ PROVIDERS = [
     {"env": "SAMBANOVA_API_KEY", "base_url": "https://api.sambanova.ai/v1",
      "model": "Meta-Llama-3.3-70B-Instruct","name": "SambaNova-70B"},
 
-    # ── 8B كآخر ملجأ: سريع لكن أقل دقة ─────────────────────────────────────
-    {"env": "CEREBRAS_API_KEY",  "base_url": "https://api.cerebras.ai/v1",
-     "model": "llama3.1-8b",               "name": "Cerebras-8B"},
+    # ── Groq-8B كآخر ملجأ ───────────────────────────────────────────────────
     {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
      "model": "llama-3.1-8b-instant",       "name": "Groq-8B"},
 ]
