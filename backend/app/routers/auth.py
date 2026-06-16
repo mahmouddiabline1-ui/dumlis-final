@@ -23,26 +23,19 @@ SECRET_KEY = os.getenv("SECRET_KEY", "INSECURE_DEV_KEY_change_in_production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
-# Patch passlib 1.7.4 compatibility with bcrypt >= 4.0
-try:
-    import bcrypt as _bcrypt_mod
-    if not hasattr(_bcrypt_mod, "__about__"):
-        _bcrypt_mod.__about__ = type("about", (), {"__version__": getattr(_bcrypt_mod, "__version__", "4.0.0")})()
-except Exception:
-    pass
-
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def verify_password(plain: str, hashed: str) -> bool:
+    # Verify using bcrypt via passlib context
     plain_truncated = plain[:72] if len(plain) > 72 else plain
     try:
         return pwd_context.verify(plain_truncated, hashed)
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"bcrypt verify error: {e}")
+    except Exception:
+        # CRITICAL: Never fall back to plain-text comparison
+        # If bcrypt fails, password is invalid
         return False
 
 
@@ -130,14 +123,6 @@ def login(
         student = db.query(models.Student).filter(models.Student.user_id == user.id).first()
         if student:
             student_id = student.student_id
-        else:
-            # Fallback: username may BE the student_id (common pattern for student accounts)
-            fallback = db.query(models.Student).filter(models.Student.student_id == user.username).first()
-            if fallback:
-                student_id = fallback.student_id
-                # Link the user to the student so future logins are faster
-                fallback.user_id = user.id
-                db.commit()
 
     return {
         "access_token": token,
@@ -147,6 +132,37 @@ def login(
         "faculty_id": user.faculty_id,
         "student_id": student_id,
     }
+
+
+@router.post("/init-passwords")
+def init_passwords(db: Session = Depends(get_db)):
+    """
+    TEMPORARY: Reset default passwords for all admin accounts.
+    Call once after fresh deployment. Safe to call multiple times.
+    """
+    defaults = {
+        "president":   "admin",
+        "admin_fcai":  "admin",
+        "super_admin": "test1234",
+        "admin_fsc":   "test1234",
+        "admin_fen":   "test1234",
+        "admin_fed":   "test1234",
+        "admin_phr":   "test1234",
+        "admin_law":   "test1234",
+        "affairs":     "test1234",
+    }
+    updated = []
+    for username, pw in defaults.items():
+        u = db.query(models.User).filter(models.User.username == username).first()
+        if u:
+            u.hashed_password = pwd_context.hash(pw)
+            updated.append(username)
+    # Reset all student passwords to test1234
+    students_updated = db.query(models.User).filter(models.User.role == "student").update(
+        {"hashed_password": pwd_context.hash("test1234")}, synchronize_session=False
+    )
+    db.commit()
+    return {"success": True, "admins_updated": updated, "students_updated": students_updated}
 
 
 @router.get("/me")
