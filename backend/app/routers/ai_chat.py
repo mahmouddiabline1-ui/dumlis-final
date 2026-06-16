@@ -826,6 +826,4 @@ async def chat(
                 status_code=502,
                 detail=f"خطأ من {provider['name']}: {type(e).__name__}: {e}")
 
-    raise HTTPException(
-        status_code=503,
-        detail=f"كل الـproviders وصلوا للحد المسموح، حاول بعد قليل. آخر خطأ: {last_error}")
+    return ChatResponse(response="عذراً، الخدمة مشغولة حالياً (جميع مزودي الذكاء الاصطناعي وصلوا للحد المسموح). انتظر 30 ثانية وحاول مرة أخرى.")
