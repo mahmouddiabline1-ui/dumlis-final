@@ -423,8 +423,11 @@ async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any
         rows = q.limit(args.get("limit", 50)).all()
         logger.info("AI: list_enrollments student_id=%s semester=%s → %d rows",
                     args.get("student_id"), args.get("semester"), len(rows))
-        ENROLL_KEYS = ["id", "student_id", "course_id", "semester", "status"]
-        return {"count": len(rows), "courses_registered": [r.course_id for r in rows]}
+        return {
+            "count": len(rows),
+            "courses_registered": [r.course_id for r in rows],
+            "queried_student_id": args.get("student_id"),
+        }
 
     elif name == "create_enrollment":
         e = models.Enrollment(
