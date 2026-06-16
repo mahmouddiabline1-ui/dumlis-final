@@ -39,7 +39,7 @@ PROVIDERS = [
     {
         "env":      "CEREBRAS_API_KEY",
         "base_url": "https://api.cerebras.ai/v1",
-        "model":    "llama-3.3-70b",
+        "model":    "llama3.3-70b",
         "name":     "Cerebras-70B",
     },
     {
@@ -72,10 +72,11 @@ def _should_skip_provider(e: Exception) -> bool:
     """Return True for any API-level error that means 'try next provider'."""
     s = str(e).lower()
     return any(x in s for x in [
-        "429", "rate_limit", "quota", "decommissioned",
-        "401", "403", "invalid_api_key", "invalid api key",
-        "please pass a valid", "api key", "authentication",
-        "model_decommissioned", "not found", "model not",
+        "429", "rate_limit", "quota",
+        "401", "403", "404",
+        "invalid_api_key", "invalid api key", "please pass a valid", "api key",
+        "authentication", "decommissioned", "not_found", "notfound",
+        "does not exist", "model_not_found", "no access",
     ])
 
 
