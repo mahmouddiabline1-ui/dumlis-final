@@ -68,13 +68,15 @@ def _get_client(provider: dict) -> Optional[AsyncOpenAI]:
     return _provider_clients[cache_key]
 
 
-def _is_rate_limit(e: Exception) -> bool:
-    s = str(e)
-    return "429" in s or "rate_limit" in s.lower() or "quota" in s.lower() or "decommissioned" in s.lower()
-
-
-def _is_auth_error(e: Exception) -> bool:
-    return "401" in str(e) or "403" in str(e)
+def _should_skip_provider(e: Exception) -> bool:
+    """Return True for any API-level error that means 'try next provider'."""
+    s = str(e).lower()
+    return any(x in s for x in [
+        "429", "rate_limit", "quota", "decommissioned",
+        "401", "403", "invalid_api_key", "invalid api key",
+        "please pass a valid", "api key", "authentication",
+        "model_decommissioned", "not found", "model not",
+    ])
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -610,8 +612,8 @@ async def chat(
             return ChatResponse(response="عذراً، حدث خطأ. حاول مرة أخرى.")
 
         except Exception as e:
-            if _is_rate_limit(e) or _is_auth_error(e):
-                last_error = f"{provider['name']}: {e}"
+            if _should_skip_provider(e):
+                last_error = f"{provider['name']}: {str(e)[:120]}"
                 continue  # try next provider
             raise HTTPException(status_code=502, detail=f"خطأ من {provider['name']}: {type(e).__name__}: {e}")
 
