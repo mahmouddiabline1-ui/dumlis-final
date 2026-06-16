@@ -49,6 +49,12 @@ PROVIDERS = [
         "name":     "SambaNova-70B",
     },
     {
+        "env":      "CLOUDFLARE_API_TOKEN",
+        "base_url": None,   # built dynamically from account id
+        "model":    "@cf/meta/llama-3.1-70b-instruct",
+        "name":     "Cloudflare-70B",
+    },
+    {
         "env":      "GROQ_API_KEY",
         "base_url": "https://api.groq.com/openai/v1",
         "model":    "llama-3.1-8b-instant",
@@ -62,9 +68,16 @@ def _get_client(provider: dict) -> Optional[AsyncOpenAI]:
     key = os.getenv(provider["env"])
     if not key:
         return None
-    cache_key = f"{provider['env']}:{provider['base_url']}"
+    base_url = provider["base_url"]
+    if base_url is None:
+        # Cloudflare: build URL from account id
+        account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+        if not account_id:
+            return None
+        base_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"
+    cache_key = f"{provider['env']}:{base_url}"
     if cache_key not in _provider_clients:
-        _provider_clients[cache_key] = AsyncOpenAI(api_key=key, base_url=provider["base_url"])
+        _provider_clients[cache_key] = AsyncOpenAI(api_key=key, base_url=base_url)
     return _provider_clients[cache_key]
 
 
