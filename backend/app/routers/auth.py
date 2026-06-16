@@ -157,12 +157,8 @@ def init_passwords(db: Session = Depends(get_db)):
         if u:
             u.hashed_password = pwd_context.hash(pw)
             updated.append(username)
-    # Reset all student passwords to test1234
-    students_updated = db.query(models.User).filter(models.User.role == "student").update(
-        {"hashed_password": pwd_context.hash("test1234")}, synchronize_session=False
-    )
     db.commit()
-    return {"success": True, "admins_updated": updated, "students_updated": students_updated}
+    return {"success": True, "admins_updated": updated}
 
 
 @router.get("/me")
