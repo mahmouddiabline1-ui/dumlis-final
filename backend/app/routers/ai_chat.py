@@ -77,6 +77,8 @@ def _should_skip_provider(e: Exception) -> bool:
         "invalid_api_key", "invalid api key", "please pass a valid", "api key",
         "authentication", "decommissioned", "not_found", "notfound",
         "does not exist", "model_not_found", "no access",
+        "tool_use_failed", "tool call validation", "parameters for tool",
+        "did not match schema",
     ])
 
 
@@ -208,7 +210,24 @@ STUDENT_TOOLS = [
 
 # ── Tool Execution ────────────────────────────────────────────────────────────
 
+def _int(v, default=None):
+    try: return int(v)
+    except (TypeError, ValueError): return default
+
+def _float(v, default=None):
+    try: return float(v)
+    except (TypeError, ValueError): return default
+
 async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any:
+    # Coerce common mistyped params (LLM sometimes sends strings instead of numbers)
+    for k in ("limit", "level", "grade_id", "attendance_id", "record_id",
+              "enrollment_id", "committee_id"):
+        if k in args and args[k] is not None:
+            args[k] = _int(args[k])
+    for k in ("midterm", "final_exam", "assignments", "oral", "practical",
+              "total", "grade_points", "paid_amount", "gpa"):
+        if k in args and args[k] is not None:
+            args[k] = _float(args[k])
 
     # ── Students ──────────────────────────────────────────────────────────────
     if name == "search_students":
