@@ -134,32 +134,6 @@ def login(
     }
 
 
-@router.post("/init-passwords")
-def init_passwords(db: Session = Depends(get_db)):
-    """
-    TEMPORARY: Reset default passwords for all admin accounts.
-    Call once after fresh deployment. Safe to call multiple times.
-    """
-    defaults = {
-        "president":   "admin",
-        "admin_fcai":  "admin",
-        "super_admin": "test1234",
-        "admin_fsc":   "test1234",
-        "admin_fen":   "test1234",
-        "admin_fed":   "test1234",
-        "admin_phr":   "test1234",
-        "admin_law":   "test1234",
-        "affairs":     "test1234",
-    }
-    updated = []
-    for username, pw in defaults.items():
-        u = db.query(models.User).filter(models.User.username == username).first()
-        if u:
-            u.hashed_password = pwd_context.hash(pw)
-            updated.append(username)
-    db.commit()
-    return {"success": True, "admins_updated": updated}
-
 
 @router.get("/me")
 def me(current_user: models.User = Depends(get_current_user)):
