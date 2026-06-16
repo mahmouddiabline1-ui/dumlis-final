@@ -27,27 +27,31 @@ ADMIN_ROLES = {"super_admin", "faculty_admin", "student_affairs"}
 
 # ── Provider registry (tried in order, skip on 429 / auth error) ──────────────
 PROVIDERS = [
-    # ── 8B أولاً: أسرع (2-5ث/call) → 3 calls في أقل من 20ث ─────────────────
-    {"env": "CEREBRAS_API_KEY",  "base_url": "https://api.cerebras.ai/v1",
-     "model": "llama3.1-8b",               "name": "Cerebras-8B"},
-    {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
-     "model": "llama-3.1-8b-instant",       "name": "Groq-8B"},
-
-    # ── Gemini: سريع ومستقر (RPM كبير) ──────────────────────────────────────
+    # ── Gemini أولاً: أذكى في العربي + سريع (3-6ث) + 1M token/يوم ──────────
     {"env": "GEMINI_API_KEY",    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
      "model": "gemini-2.0-flash",           "name": "Gemini-2.0-Flash"},
     {"env": "GEMINI_API_KEY",    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
      "model": "gemini-1.5-flash",           "name": "Gemini-1.5-Flash"},
 
-    # ── 70B كـfallback: أبطأ لكن أدق ────────────────────────────────────────
+    # ── Cerebras-70B: سريع (hardware مخصص) + أدق من 8B ──────────────────────
     {"env": "CEREBRAS_API_KEY",  "base_url": "https://api.cerebras.ai/v1",
      "model": "llama3.3-70b",               "name": "Cerebras-70B"},
+
+    # ── Groq 70B: موثوق ──────────────────────────────────────────────────────
     {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
      "model": "llama-3.3-70b-versatile",   "name": "Groq-3.3-70B"},
     {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
      "model": "llama-3.1-70b-versatile",   "name": "Groq-3.1-70B"},
+
+    # ── SambaNova: fallback ───────────────────────────────────────────────────
     {"env": "SAMBANOVA_API_KEY", "base_url": "https://api.sambanova.ai/v1",
      "model": "Meta-Llama-3.3-70B-Instruct","name": "SambaNova-70B"},
+
+    # ── 8B كآخر ملجأ: سريع لكن أقل دقة ─────────────────────────────────────
+    {"env": "CEREBRAS_API_KEY",  "base_url": "https://api.cerebras.ai/v1",
+     "model": "llama3.1-8b",               "name": "Cerebras-8B"},
+    {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
+     "model": "llama-3.1-8b-instant",       "name": "Groq-8B"},
 ]
 _provider_clients: dict[str, AsyncOpenAI] = {}
 _blacklisted_until: dict[str, float] = {}   # provider name → unix timestamp
