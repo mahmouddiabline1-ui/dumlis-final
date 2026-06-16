@@ -20,20 +20,61 @@ from app.routers.auth import get_current_user, pwd_context
 from app import models
 
 router = APIRouter()
-MODEL = "llama-3.3-70b-specdec"
-_groq_client: Optional[AsyncOpenAI] = None
-
 ADMIN_ROLES = {"super_admin", "faculty_admin", "student_affairs"}
 
+# ── Provider registry (tried in order, skip on 429 / auth error) ──────────────
+PROVIDERS = [
+    {
+        "env":      "GROQ_API_KEY",
+        "base_url": "https://api.groq.com/openai/v1",
+        "model":    "llama-3.3-70b-versatile",
+        "name":     "Groq-70B",
+    },
+    {
+        "env":      "GEMINI_API_KEY",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "model":    "gemini-2.0-flash",
+        "name":     "Gemini-Flash",
+    },
+    {
+        "env":      "CEREBRAS_API_KEY",
+        "base_url": "https://api.cerebras.ai/v1",
+        "model":    "llama-3.3-70b",
+        "name":     "Cerebras-70B",
+    },
+    {
+        "env":      "SAMBANOVA_API_KEY",
+        "base_url": "https://api.sambanova.ai/v1",
+        "model":    "Meta-Llama-3.3-70B-Instruct",
+        "name":     "SambaNova-70B",
+    },
+    {
+        "env":      "GROQ_API_KEY",
+        "base_url": "https://api.groq.com/openai/v1",
+        "model":    "llama-3.1-8b-instant",
+        "name":     "Groq-8B-fallback",
+    },
+]
+_provider_clients: dict[str, AsyncOpenAI] = {}
 
-def get_groq_client() -> AsyncOpenAI:
-    global _groq_client
-    if _groq_client is None:
-        api_key = os.getenv("GROQ_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=503, detail="GROQ_API_KEY غير مضبوط على الخادم")
-        _groq_client = AsyncOpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
-    return _groq_client
+
+def _get_client(provider: dict) -> Optional[AsyncOpenAI]:
+    key = os.getenv(provider["env"])
+    if not key:
+        return None
+    cache_key = f"{provider['env']}:{provider['base_url']}"
+    if cache_key not in _provider_clients:
+        _provider_clients[cache_key] = AsyncOpenAI(api_key=key, base_url=provider["base_url"])
+    return _provider_clients[cache_key]
+
+
+def _is_rate_limit(e: Exception) -> bool:
+    s = str(e)
+    return "429" in s or "rate_limit" in s.lower() or "quota" in s.lower() or "decommissioned" in s.lower()
+
+
+def _is_auth_error(e: Exception) -> bool:
+    return "401" in str(e) or "403" in str(e)
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -531,13 +572,6 @@ async def chat(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    try:
-        groq = get_groq_client()
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"تعذّر الاتصال بـGroq: {e}")
-
     is_admin = current_user.role in ADMIN_ROLES
     tools    = ADMIN_TOOLS if is_admin else STUDENT_TOOLS
     system   = ADMIN_SYSTEM if is_admin else STUDENT_SYSTEM
@@ -545,25 +579,40 @@ async def chat(
     messages = [{"role": "system", "content": system}]
     messages += [{"role": m.role, "content": m.content} for m in body.messages]
 
-    try:
-        for _ in range(10):
-            resp = await groq.chat.completions.create(
-                model=MODEL, messages=messages, tools=tools,
-                tool_choice="auto", max_tokens=2048, temperature=0.3,
-            )
-            choice = resp.choices[0]
-            if choice.finish_reason != "tool_calls":
-                return ChatResponse(response=choice.message.content or "")
+    # ── Try each provider in order ────────────────────────────────────────────
+    last_error = "لا يوجد provider متاح"
+    for provider in PROVIDERS:
+        client = _get_client(provider)
+        if client is None:
+            continue  # key not configured, skip
 
-            messages.append(choice.message)
-            for tc in choice.message.tool_calls:
-                try:
-                    result = await run_tool(tc.function.name, json.loads(tc.function.arguments), current_user, db)
-                except Exception as e:
-                    result = {"error": str(e)}
-                messages.append({"role": "tool", "tool_call_id": tc.id,
-                                 "content": json.dumps(result, ensure_ascii=False, default=str)})
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"خطأ من Groq API: {type(e).__name__}: {e}")
+        try:
+            # ── Agentic loop for this provider ────────────────────────────────
+            loop_messages = list(messages)
+            for _ in range(10):
+                resp = await client.chat.completions.create(
+                    model=provider["model"], messages=loop_messages, tools=tools,
+                    tool_choice="auto", max_tokens=2048, temperature=0.3,
+                )
+                choice = resp.choices[0]
+                if choice.finish_reason != "tool_calls":
+                    return ChatResponse(response=choice.message.content or "")
 
-    return ChatResponse(response="عذراً، حدث خطأ. حاول مرة أخرى.")
+                loop_messages.append(choice.message)
+                for tc in choice.message.tool_calls:
+                    try:
+                        result = await run_tool(tc.function.name, json.loads(tc.function.arguments), current_user, db)
+                    except Exception as e:
+                        result = {"error": str(e)}
+                    loop_messages.append({"role": "tool", "tool_call_id": tc.id,
+                                         "content": json.dumps(result, ensure_ascii=False, default=str)})
+
+            return ChatResponse(response="عذراً، حدث خطأ. حاول مرة أخرى.")
+
+        except Exception as e:
+            if _is_rate_limit(e) or _is_auth_error(e):
+                last_error = f"{provider['name']}: {e}"
+                continue  # try next provider
+            raise HTTPException(status_code=502, detail=f"خطأ من {provider['name']}: {type(e).__name__}: {e}")
+
+    raise HTTPException(status_code=503, detail=f"كل الـproviders وصلوا للحد المسموح، حاول بعد قليل. آخر خطأ: {last_error}")
