@@ -24,42 +24,37 @@ ADMIN_ROLES = {"super_admin", "faculty_admin", "student_affairs"}
 
 # ── Provider registry (tried in order, skip on 429 / auth error) ──────────────
 PROVIDERS = [
-    {
-        "env":      "GROQ_API_KEY",
-        "base_url": "https://api.groq.com/openai/v1",
-        "model":    "llama-3.3-70b-versatile",
-        "name":     "Groq-70B",
-    },
-    {
-        "env":      "GEMINI_API_KEY",
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "model":    "gemini-2.0-flash",
-        "name":     "Gemini-Flash",
-    },
-    {
-        "env":      "CEREBRAS_API_KEY",
-        "base_url": "https://api.cerebras.ai/v1",
-        "model":    "llama3.3-70b",
-        "name":     "Cerebras-70B",
-    },
-    {
-        "env":      "SAMBANOVA_API_KEY",
-        "base_url": "https://api.sambanova.ai/v1",
-        "model":    "Meta-Llama-3.3-70B-Instruct",
-        "name":     "SambaNova-70B",
-    },
-    {
-        "env":      "CLOUDFLARE_API_TOKEN",
-        "base_url": None,   # built dynamically from account id
-        "model":    "@cf/meta/llama-3.1-70b-instruct",
-        "name":     "Cloudflare-70B",
-    },
-    {
-        "env":      "GROQ_API_KEY",
-        "base_url": "https://api.groq.com/openai/v1",
-        "model":    "llama-3.1-8b-instant",
-        "name":     "Groq-8B-fallback",
-    },
+    # ── Groq: كل موديل له limit مستقل (100K أو 500K token/يوم) ──────────────
+    {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
+     "model": "llama-3.3-70b-versatile",   "name": "Groq-3.3-70B"},
+    {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
+     "model": "llama-3.1-70b-versatile",   "name": "Groq-3.1-70B"},
+
+    # ── Gemini: 1M token/يوم مجاناً ──────────────────────────────────────────
+    {"env": "GEMINI_API_KEY",    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+     "model": "gemini-2.0-flash",           "name": "Gemini-2.0-Flash"},
+    {"env": "GEMINI_API_KEY",    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+     "model": "gemini-1.5-flash",           "name": "Gemini-1.5-Flash"},
+
+    # ── Cerebras: موديلان بـlimits مستقلة ────────────────────────────────────
+    {"env": "CEREBRAS_API_KEY",  "base_url": "https://api.cerebras.ai/v1",
+     "model": "llama3.3-70b",               "name": "Cerebras-70B"},
+    {"env": "CEREBRAS_API_KEY",  "base_url": "https://api.cerebras.ai/v1",
+     "model": "llama3.1-8b",               "name": "Cerebras-8B"},
+
+    # ── SambaNova: 70B + 405B بنفس الـkey (limits مستقلة) ───────────────────
+    {"env": "SAMBANOVA_API_KEY", "base_url": "https://api.sambanova.ai/v1",
+     "model": "Meta-Llama-3.3-70B-Instruct","name": "SambaNova-70B"},
+    {"env": "SAMBANOVA_API_KEY", "base_url": "https://api.sambanova.ai/v1",
+     "model": "Meta-Llama-3.1-405B-Instruct","name": "SambaNova-405B"},
+
+    # ── Cloudflare Workers AI ─────────────────────────────────────────────────
+    {"env": "CLOUDFLARE_API_TOKEN", "base_url": None,
+     "model": "@cf/meta/llama-3.1-70b-instruct", "name": "Cloudflare-70B"},
+
+    # ── Groq آخر ملجأ: 500K token/يوم ───────────────────────────────────────
+    {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
+     "model": "llama-3.1-8b-instant",       "name": "Groq-8B"},
 ]
 _provider_clients: dict[str, AsyncOpenAI] = {}
 
