@@ -693,7 +693,13 @@ async def chat(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    groq = get_groq_client()
+    try:
+        groq = get_groq_client()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"تعذّر الاتصال بـGroq: {e}")
+
     is_admin = current_user.role in ADMIN_ROLES
     tools    = ADMIN_TOOLS if is_admin else STUDENT_TOOLS
     system   = ADMIN_SYSTEM if is_admin else STUDENT_SYSTEM
@@ -701,22 +707,25 @@ async def chat(
     messages = [{"role": "system", "content": system}]
     messages += [{"role": m.role, "content": m.content} for m in body.messages]
 
-    for _ in range(10):
-        resp = await groq.chat.completions.create(
-            model=MODEL, messages=messages, tools=tools,
-            tool_choice="auto", max_tokens=2048, temperature=0.3,
-        )
-        choice = resp.choices[0]
-        if choice.finish_reason != "tool_calls":
-            return ChatResponse(response=choice.message.content or "")
+    try:
+        for _ in range(10):
+            resp = await groq.chat.completions.create(
+                model=MODEL, messages=messages, tools=tools,
+                tool_choice="auto", max_tokens=2048, temperature=0.3,
+            )
+            choice = resp.choices[0]
+            if choice.finish_reason != "tool_calls":
+                return ChatResponse(response=choice.message.content or "")
 
-        messages.append(choice.message)
-        for tc in choice.message.tool_calls:
-            try:
-                result = await run_tool(tc.function.name, json.loads(tc.function.arguments), current_user, db)
-            except Exception as e:
-                result = {"error": str(e)}
-            messages.append({"role": "tool", "tool_call_id": tc.id,
-                             "content": json.dumps(result, ensure_ascii=False, default=str)})
+            messages.append(choice.message)
+            for tc in choice.message.tool_calls:
+                try:
+                    result = await run_tool(tc.function.name, json.loads(tc.function.arguments), current_user, db)
+                except Exception as e:
+                    result = {"error": str(e)}
+                messages.append({"role": "tool", "tool_call_id": tc.id,
+                                 "content": json.dumps(result, ensure_ascii=False, default=str)})
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"خطأ من Groq API: {type(e).__name__}: {e}")
 
     return ChatResponse(response="عذراً، حدث خطأ. حاول مرة أخرى.")
