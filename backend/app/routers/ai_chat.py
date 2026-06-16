@@ -57,13 +57,13 @@ _provider_clients: dict[str, AsyncOpenAI] = {}
 _blacklisted_until: dict[str, float] = {}   # provider name → unix timestamp
 
 
-def _blacklist(name: str, seconds: int = 60) -> None:
+def _blacklist(name: str, seconds: int = 30) -> None:
     import time
     _blacklisted_until[name] = time.time() + seconds
 
 
 def _blacklist_long(name: str) -> None:
-    _blacklist(name, seconds=300)  # 5 min for hard rate limits
+    _blacklist(name, seconds=120)  # 2 min for hard rate limits
 
 
 def _is_blacklisted(name: str) -> bool:
