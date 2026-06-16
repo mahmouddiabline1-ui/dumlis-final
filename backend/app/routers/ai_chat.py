@@ -20,7 +20,7 @@ from app.routers.auth import get_current_user, pwd_context
 from app import models
 
 router = APIRouter()
-MODEL = "llama-3.3-70b-versatile"
+MODEL = "llama-3.1-8b-instant"
 _groq_client: Optional[AsyncOpenAI] = None
 
 ADMIN_ROLES = {"super_admin", "faculty_admin", "student_affairs"}
@@ -88,239 +88,74 @@ def _fn(name: str, desc: str, props: dict, required: list = None) -> dict:
 
 # ── Tool Definitions ──────────────────────────────────────────────────────────
 
+def _s(t): return {"type": t}
+def _si(): return {"type": "integer"}
+def _sn(): return {"type": "number"}
+def _sb(): return {"type": "boolean"}
+
 ADMIN_TOOLS = [
-    # ── Students ──────────────────────────────────────────────────────────────
-    _fn("search_students", "البحث عن طلاب", {
-        "search":      {"type": "string",  "description": "اسم أو رقم الطالب"},
-        "faculty_id":  {"type": "string"},
-        "level":       {"type": "integer"},
-        "status":      {"type": "string"},
-        "fees_status": {"type": "string"},
-        "limit":       {"type": "integer"},
-    }),
-    _fn("get_student", "جلب بيانات طالب", {"student_id": {"type": "string"}}, ["student_id"]),
-    _fn("create_student", "إنشاء طالب جديد", {
-        "student_id":  {"type": "string", "description": "الرقم الجامعي"},
-        "name":        {"type": "string"},
-        "faculty_id":  {"type": "string"},
-        "level":       {"type": "integer"},
-        "regulation":  {"type": "string"},
-        "national_id": {"type": "string"},
-        "phone":       {"type": "string"},
-        "email":       {"type": "string"},
-    }, ["student_id", "name", "faculty_id", "level", "regulation"]),
-    _fn("update_student", "تحديث بيانات طالب", {
-        "student_id":  {"type": "string"},
-        "name":        {"type": "string"},
-        "status":      {"type": "string"},
-        "fees_status": {"type": "string"},
-        "phone":       {"type": "string"},
-        "email":       {"type": "string"},
-        "level":       {"type": "integer"},
-        "gpa":         {"type": "number"},
-        "city":        {"type": "string"},
-    }, ["student_id"]),
-    _fn("delete_student", "حذف طالب نهائياً", {"student_id": {"type": "string"}}, ["student_id"]),
-    _fn("block_student", "حجب طالب", {
-        "student_id": {"type": "string"},
-        "reason":     {"type": "string"},
-        "notes":      {"type": "string"},
-    }, ["student_id", "reason"]),
-    _fn("unblock_student", "رفع الحجب عن طالب", {"student_id": {"type": "string"}}, ["student_id"]),
-    _fn("list_student_blocks", "عرض الطلاب المحجوبين", {
-        "faculty_id": {"type": "string"},
-        "status":     {"type": "string"},
-    }),
+    _fn("search_students",   "بحث طلاب",      {"search": _s("string"), "faculty_id": _s("string"), "level": _si(), "status": _s("string"), "fees_status": _s("string"), "limit": _si()}),
+    _fn("get_student",       "بيانات طالب",   {"student_id": _s("string")}, ["student_id"]),
+    _fn("create_student",    "إنشاء طالب",    {"student_id": _s("string"), "name": _s("string"), "faculty_id": _s("string"), "level": _si(), "regulation": _s("string"), "national_id": _s("string"), "phone": _s("string"), "email": _s("string")}, ["student_id","name","faculty_id","level","regulation"]),
+    _fn("update_student",    "تعديل طالب",    {"student_id": _s("string"), "name": _s("string"), "status": _s("string"), "fees_status": _s("string"), "phone": _s("string"), "email": _s("string"), "level": _si(), "gpa": _sn(), "city": _s("string")}, ["student_id"]),
+    _fn("delete_student",    "حذف طالب",      {"student_id": _s("string")}, ["student_id"]),
+    _fn("block_student",     "حجب طالب",      {"student_id": _s("string"), "reason": _s("string"), "notes": _s("string")}, ["student_id","reason"]),
+    _fn("unblock_student",   "رفع الحجب",     {"student_id": _s("string")}, ["student_id"]),
+    _fn("list_student_blocks","الطلاب المحجوبون",{"faculty_id": _s("string"), "status": _s("string")}),
 
-    # ── Grades ────────────────────────────────────────────────────────────────
-    _fn("get_student_grades", "عرض درجات طالب", {
-        "student_id": {"type": "string"},
-        "semester":   {"type": "string"},
-    }, ["student_id"]),
-    _fn("update_grade", "تعديل درجة طالب", {
-        "grade_id":    {"type": "integer", "description": "id الدرجة من get_student_grades"},
-        "midterm":     {"type": "number"},
-        "final_exam":  {"type": "number"},
-        "assignments": {"type": "number"},
-        "oral":        {"type": "number"},
-        "practical":   {"type": "number"},
-        "total":       {"type": "number"},
-        "grade_letter":{"type": "string"},
-        "grade_points":{"type": "number"},
-    }, ["grade_id"]),
-    _fn("create_grade", "إضافة درجة جديدة لطالب", {
-        "student_id":  {"type": "string"},
-        "course_id":   {"type": "string"},
-        "semester":    {"type": "string"},
-        "midterm":     {"type": "number"},
-        "final_exam":  {"type": "number"},
-        "total":       {"type": "number"},
-        "grade_letter":{"type": "string"},
-    }, ["student_id", "course_id", "semester"]),
+    _fn("get_student_grades","درجات طالب",    {"student_id": _s("string"), "semester": _s("string")}, ["student_id"]),
+    _fn("update_grade",      "تعديل درجة",    {"grade_id": _si(), "midterm": _sn(), "final_exam": _sn(), "assignments": _sn(), "oral": _sn(), "practical": _sn(), "total": _sn(), "grade_letter": _s("string"), "grade_points": _sn()}, ["grade_id"]),
+    _fn("create_grade",      "إضافة درجة",    {"student_id": _s("string"), "course_id": _s("string"), "semester": _s("string"), "midterm": _sn(), "final_exam": _sn(), "total": _sn(), "grade_letter": _s("string")}, ["student_id","course_id","semester"]),
 
-    # ── Attendance ────────────────────────────────────────────────────────────
-    _fn("get_student_attendance", "عرض سجل حضور طالب", {
-        "student_id": {"type": "string"},
-        "course_id":  {"type": "string"},
-    }, ["student_id"]),
-    _fn("update_attendance", "تعديل حضور طالب (حاضر/غائب)", {
-        "attendance_id": {"type": "integer", "description": "id السجل من get_student_attendance"},
-        "status":        {"type": "string", "description": "حاضر أو غائب"},
-        "notes":         {"type": "string"},
-    }, ["attendance_id", "status"]),
+    _fn("get_student_attendance","حضور طالب", {"student_id": _s("string"), "course_id": _s("string")}, ["student_id"]),
+    _fn("update_attendance", "تعديل حضور",    {"attendance_id": _si(), "status": _s("string"), "notes": _s("string")}, ["attendance_id","status"]),
 
-    # ── Financial ─────────────────────────────────────────────────────────────
-    _fn("get_student_financial", "عرض الوضع المالي لطالب", {
-        "student_id": {"type": "string"}
-    }, ["student_id"]),
-    _fn("update_financial_record", "تحديث سجل مالي (تسديد رسوم مثلاً)", {
-        "record_id":   {"type": "integer"},
-        "paid_amount": {"type": "number"},
-        "status":      {"type": "string", "description": "مسدد أو غير مسدد أو جزئي"},
-        "receipt_no":  {"type": "string"},
-    }, ["record_id"]),
-    _fn("list_financial_records", "عرض السجلات المالية", {
-        "faculty_id":    {"type": "string"},
-        "student_id":    {"type": "string"},
-        "status":        {"type": "string"},
-        "academic_year": {"type": "string"},
-        "limit":         {"type": "integer"},
-    }),
+    _fn("get_student_financial","ماليات طالب",{"student_id": _s("string")}, ["student_id"]),
+    _fn("update_financial_record","تحديث مالية",{"record_id": _si(), "paid_amount": _sn(), "status": _s("string"), "receipt_no": _s("string")}, ["record_id"]),
+    _fn("list_financial_records","قائمة ماليات",{"faculty_id": _s("string"), "student_id": _s("string"), "status": _s("string"), "academic_year": _s("string"), "limit": _si()}),
 
-    # ── Enrollments ───────────────────────────────────────────────────────────
-    _fn("list_enrollments", "عرض تسجيلات الطلاب في المواد", {
-        "student_id": {"type": "string"},
-        "course_id":  {"type": "string"},
-        "semester":   {"type": "string"},
-        "faculty_id": {"type": "string"},
-        "limit":      {"type": "integer"},
-    }),
-    _fn("create_enrollment", "تسجيل طالب في مادة", {
-        "student_id": {"type": "string"},
-        "course_id":  {"type": "string"},
-        "semester":   {"type": "string"},
-        "faculty_id": {"type": "string"},
-    }, ["student_id", "course_id", "semester"]),
-    _fn("update_enrollment", "تحديث حالة تسجيل", {
-        "enrollment_id": {"type": "integer"},
-        "status":        {"type": "string"},
-    }, ["enrollment_id", "status"]),
-    _fn("delete_enrollment", "حذف تسجيل طالب من مادة", {
-        "enrollment_id": {"type": "integer"}
-    }, ["enrollment_id"]),
+    _fn("list_enrollments",  "قائمة تسجيلات", {"student_id": _s("string"), "course_id": _s("string"), "semester": _s("string"), "faculty_id": _s("string"), "limit": _si()}),
+    _fn("create_enrollment", "تسجيل في مادة", {"student_id": _s("string"), "course_id": _s("string"), "semester": _s("string"), "faculty_id": _s("string")}, ["student_id","course_id","semester"]),
+    _fn("update_enrollment", "تعديل تسجيل",   {"enrollment_id": _si(), "status": _s("string")}, ["enrollment_id","status"]),
+    _fn("delete_enrollment", "حذف تسجيل",     {"enrollment_id": _si()}, ["enrollment_id"]),
 
-    # ── Courses ───────────────────────────────────────────────────────────────
-    _fn("list_courses", "عرض المواد الدراسية", {
-        "faculty_id": {"type": "string"},
-        "level":      {"type": "integer"},
-        "semester":   {"type": "string"},
-        "limit":      {"type": "integer"},
-    }),
-    _fn("create_course", "إنشاء مادة دراسية جديدة", {
-        "id":           {"type": "string", "description": "كود المادة"},
-        "name":         {"type": "string"},
-        "level":        {"type": "integer"},
-        "faculty_id":   {"type": "string"},
-        "credit_hours": {"type": "integer"},
-        "course_type":  {"type": "string"},
-        "semester":     {"type": "string"},
-    }, ["id", "name", "level", "faculty_id"]),
-    _fn("update_course", "تعديل مادة دراسية", {
-        "course_id":    {"type": "string"},
-        "name":         {"type": "string"},
-        "level":        {"type": "integer"},
-        "credit_hours": {"type": "integer"},
-        "semester":     {"type": "string"},
-        "course_type":  {"type": "string"},
-    }, ["course_id"]),
-    _fn("delete_course", "حذف مادة دراسية", {"course_id": {"type": "string"}}, ["course_id"]),
+    _fn("list_courses",      "قائمة مواد",    {"faculty_id": _s("string"), "level": _si(), "semester": _s("string"), "limit": _si()}),
+    _fn("create_course",     "إنشاء مادة",    {"id": _s("string"), "name": _s("string"), "level": _si(), "faculty_id": _s("string"), "credit_hours": _si(), "course_type": _s("string"), "semester": _s("string")}, ["id","name","level","faculty_id"]),
+    _fn("update_course",     "تعديل مادة",    {"course_id": _s("string"), "name": _s("string"), "level": _si(), "credit_hours": _si(), "semester": _s("string"), "course_type": _s("string")}, ["course_id"]),
+    _fn("delete_course",     "حذف مادة",      {"course_id": _s("string")}, ["course_id"]),
 
-    # ── Departments & Faculties ────────────────────────────────────────────────
-    _fn("list_faculties", "عرض الكليات", {}),
-    _fn("list_departments", "عرض الأقسام", {"faculty_id": {"type": "string"}}),
+    _fn("list_faculties",    "قائمة الكليات", {}),
+    _fn("list_departments",  "قائمة الأقسام", {"faculty_id": _s("string")}),
 
-    # ── Rooms & Committees ────────────────────────────────────────────────────
-    _fn("list_rooms", "عرض القاعات", {
-        "room_type": {"type": "string"},
-        "status":    {"type": "string"},
-    }),
-    _fn("update_room", "تحديث قاعة", {
-        "room_id":  {"type": "string"},
-        "name":     {"type": "string"},
-        "capacity": {"type": "integer"},
-        "status":   {"type": "string"},
-    }, ["room_id"]),
-    _fn("list_committees", "عرض لجان الامتحانات", {
-        "faculty_id": {"type": "string"},
-        "semester":   {"type": "string"},
-    }),
-    _fn("update_committee", "تحديث لجنة امتحانات", {
-        "committee_id": {"type": "integer"},
-        "supervisor":   {"type": "string"},
-        "exam_date":    {"type": "string", "description": "YYYY-MM-DD"},
-        "status":       {"type": "string"},
-    }, ["committee_id"]),
+    _fn("list_rooms",        "قائمة القاعات", {"room_type": _s("string"), "status": _s("string")}),
+    _fn("update_room",       "تعديل قاعة",    {"room_id": _s("string"), "name": _s("string"), "capacity": _si(), "status": _s("string")}, ["room_id"]),
 
-    # ── Registration Requests ─────────────────────────────────────────────────
-    _fn("list_registration_requests", "عرض طلبات التسجيل", {
-        "faculty_id": {"type": "string"},
-        "status":     {"type": "string"},
-        "limit":      {"type": "integer"},
-    }),
-    _fn("update_registration_request", "قبول أو رفض طلب تسجيل", {
-        "request_id":     {"type": "string"},
-        "status":         {"type": "string"},
-        "admin_response": {"type": "string"},
-    }, ["request_id", "status"]),
+    _fn("list_committees",   "قائمة اللجان",  {"faculty_id": _s("string"), "semester": _s("string")}),
+    _fn("update_committee",  "تعديل لجنة",    {"committee_id": _si(), "supervisor": _s("string"), "exam_date": _s("string"), "status": _s("string")}, ["committee_id"]),
 
-    # ── Announcements ─────────────────────────────────────────────────────────
-    _fn("list_announcements", "عرض الإعلانات", {
-        "faculty_id": {"type": "string"},
-    }),
-    _fn("create_announcement", "إنشاء إعلان", {
-        "title":      {"type": "string"},
-        "body":       {"type": "string"},
-        "faculty_id": {"type": "string"},
-        "priority":   {"type": "string"},
-    }, ["title", "body"]),
-    _fn("update_announcement", "تعديل إعلان", {
-        "announcement_id": {"type": "string"},
-        "title":           {"type": "string"},
-        "body":            {"type": "string"},
-        "is_active":       {"type": "boolean"},
-    }, ["announcement_id"]),
-    _fn("delete_announcement", "حذف إعلان", {
-        "announcement_id": {"type": "string"}
-    }, ["announcement_id"]),
+    _fn("list_registration_requests","طلبات التسجيل",{"faculty_id": _s("string"), "status": _s("string"), "limit": _si()}),
+    _fn("update_registration_request","قبول/رفض طلب",{"request_id": _s("string"), "status": _s("string"), "admin_response": _s("string")}, ["request_id","status"]),
 
-    # ── Users & Staff ─────────────────────────────────────────────────────────
-    _fn("list_users", "عرض مستخدمي النظام", {
-        "faculty_id": {"type": "string"},
-        "role":       {"type": "string"},
-    }),
-    _fn("list_staff", "عرض أعضاء هيئة التدريس", {
-        "faculty_id": {"type": "string"},
-    }),
+    _fn("list_announcements","قائمة إعلانات", {"faculty_id": _s("string")}),
+    _fn("create_announcement","إنشاء إعلان",  {"title": _s("string"), "body": _s("string"), "faculty_id": _s("string"), "priority": _s("string")}, ["title","body"]),
+    _fn("update_announcement","تعديل إعلان",  {"announcement_id": _s("string"), "title": _s("string"), "body": _s("string"), "is_active": _sb()}, ["announcement_id"]),
+    _fn("delete_announcement","حذف إعلان",    {"announcement_id": _s("string")}, ["announcement_id"]),
 
-    # ── Statistics & Logs ─────────────────────────────────────────────────────
-    _fn("get_statistics", "إحصائيات شاملة عن الطلاب", {
-        "faculty_id": {"type": "string"},
-    }),
-    _fn("get_activity_logs", "عرض سجل النشاطات الأخيرة", {
-        "faculty_id":  {"type": "string"},
-        "entity_type": {"type": "string"},
-        "limit":       {"type": "integer"},
-    }),
+    _fn("list_users",        "قائمة المستخدمين",{"faculty_id": _s("string"), "role": _s("string")}),
+    _fn("list_staff",        "قائمة الموظفين",  {"faculty_id": _s("string")}),
+
+    _fn("get_statistics",    "إحصائيات",      {"faculty_id": _s("string")}),
+    _fn("get_activity_logs", "سجل النشاطات",  {"faculty_id": _s("string"), "entity_type": _s("string"), "limit": _si()}),
 ]
 
 STUDENT_TOOLS = [
-    _fn("get_my_profile",    "بياناتي الشخصية",    {}),
-    _fn("get_my_grades",     "درجاتي",              {"semester": {"type": "string"}}),
-    _fn("get_my_attendance", "سجل حضوري",           {"course_id": {"type": "string"}}),
-    _fn("get_my_financial",  "وضعي المالي",         {}),
-    _fn("get_my_schedule",   "جدول محاضراتي",       {"semester": {"type": "string"}}),
-    _fn("get_my_enrollments","موادي المسجلة",       {"semester": {"type": "string"}}),
-    _fn("list_announcements","الإعلانات الجامعية",  {"faculty_id": {"type": "string"}}),
+    _fn("get_my_profile",    "بياناتي",       {}),
+    _fn("get_my_grades",     "درجاتي",        {"semester": _s("string")}),
+    _fn("get_my_attendance", "حضوري",         {"course_id": _s("string")}),
+    _fn("get_my_financial",  "ماليتي",        {}),
+    _fn("get_my_schedule",   "جدولي",         {"semester": _s("string")}),
+    _fn("get_my_enrollments","موادي",          {"semester": _s("string")}),
+    _fn("list_announcements","الإعلانات",     {"faculty_id": _s("string")}),
 ]
 
 
