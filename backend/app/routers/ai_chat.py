@@ -21,15 +21,20 @@ from app import models
 
 router = APIRouter()
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 MODEL = "llama-3.3-70b-versatile"
 PORT = os.getenv("PORT", "8000")
 INTERNAL_BASE = f"http://127.0.0.1:{PORT}"
 
-groq = AsyncOpenAI(
-    api_key=GROQ_API_KEY,
-    base_url="https://api.groq.com/openai/v1",
-)
+_groq_client: AsyncOpenAI | None = None
+
+def get_groq_client() -> AsyncOpenAI:
+    global _groq_client
+    if _groq_client is None:
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=503, detail="GROQ_API_KEY غير مضبوط على الخادم")
+        _groq_client = AsyncOpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
+    return _groq_client
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
@@ -501,8 +506,7 @@ async def chat(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not GROQ_API_KEY:
-        raise HTTPException(status_code=503, detail="GROQ_API_KEY غير مضبوط على الخادم")
+    groq = get_groq_client()
 
     is_admin = current_user.role in ADMIN_ROLES
     system_prompt = ADMIN_SYSTEM if is_admin else STUDENT_SYSTEM
