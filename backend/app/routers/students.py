@@ -1,4 +1,3 @@
-import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
@@ -10,7 +9,6 @@ from app.routers.auth import get_current_user, get_scoped_faculty_id
 from app.activity_helper import log_activity
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 @router.get("/")
 def list_students(
@@ -22,15 +20,12 @@ def list_students(
     fees_status  : Optional[str]  = Query(None),
     search       : Optional[str]  = Query(None, description="Search by name or student_id"),
     skip         : int            = Query(0, ge=0),
-    limit        : int            = Query(50, ge=1, le=500),
+    limit        : int            = Query(50, ge=1, le=2000),
     db: Session = Depends(get_db),
     scoped_faculty_id: Optional[str] = Depends(get_scoped_faculty_id),
 ):
     """List students with optional filters."""
-    q = db.query(models.Student).options(
-        joinedload(models.Student.faculty),
-        joinedload(models.Student.department)
-    ).outerjoin(models.Faculty).outerjoin(models.Department)
+    q = db.query(models.Student).outerjoin(models.Faculty).outerjoin(models.Department)
     effective_faculty_id = scoped_faculty_id or faculty_id
 
     if effective_faculty_id:
@@ -71,13 +66,8 @@ def list_students(
             'city': s.city,
             'status': s.status,
             'fees_status': s.fees_status,
-            'gpa_mod_status'  : s.gpa_mod_status,
-            'gpa_mod_reason'  : s.gpa_mod_reason,
-            'level_mod_status': s.level_mod_status,
-            'level_mod_reason': s.level_mod_reason,
-            'survey_status'   : s.survey_status,
-            'id_card_status'  : s.id_card_status,
-            'graduation_year' : s.graduation_year,
+            'created_at': s.created_at.isoformat() if s.created_at else None,
+            'enrollment_date': s.enrollment_date.isoformat() if hasattr(s, 'enrollment_date') and s.enrollment_date else None,
         }
         for s in students
     ]
@@ -170,7 +160,7 @@ def get_student_statistics(
             {"name": "مسدد", "value": fees_stats.get("مسدد", 0)},
             {"name": "غير مسدد", "value": fees_stats.get("غير مسدد", 0)},
         ],
-        "activeStudents": sum(status_stats.get(s, 0) for s in ["مقيد", "نشط", "مستجد", "منقول"]),
+        "activeStudents": status_stats.get("مقيد", 0),
         "graduatedStudents": status_stats.get("خريج", 0),
         "suspendedStudents": status_stats.get("موقوف", 0),
         "expelledStudents": status_stats.get("مفصول", 0),
@@ -194,7 +184,7 @@ def get_student(
         raise HTTPException(status_code=404, detail="Student not found or access denied")
     return student
 
-@router.post("/", response_model=schemas.StudentResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/")
 def create_student(
     data: schemas.StudentCreate,
     db: Session = Depends(get_db),
@@ -212,22 +202,19 @@ def create_student(
     db.commit()
     db.refresh(student)
 
-    try:
-        log_activity(
-            db=db,
-            user_id=user.id,
-            faculty_id=scoped_faculty_id,
-            entity_type="student",
-            entity_id=student.student_id,
-            action="create",
-            description=f"Created student: {student.name} ({student.student_id})"
-        )
-    except Exception as _e:
-        logger.warning("Activity log failed: %s", _e)
+    log_activity(
+        db=db,
+        user_id=user.id,
+        faculty_id=scoped_faculty_id,
+        entity_type="student",
+        entity_id=student.student_id,
+        action="create",
+        description=f"Created student: {student.name} ({student.student_id})"
+    )
 
     return student
 
-@router.put("/{student_id}", response_model=schemas.StudentResponse)
+@router.put("/{student_id}")
 def update_student(
     student_id: str,
     data: schemas.StudentUpdate,
