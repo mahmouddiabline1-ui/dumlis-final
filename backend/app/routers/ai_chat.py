@@ -6,8 +6,11 @@ Uses direct DB queries — no HTTP self-calls.
 import os
 import json
 import uuid as _uuid
+import logging
 from typing import Any, Optional
 from datetime import date
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
@@ -75,7 +78,7 @@ def _get_client(provider: dict) -> Optional[AsyncOpenAI]:
         base_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"
     cache_key = f"{provider['env']}:{base_url}"
     if cache_key not in _provider_clients:
-        _provider_clients[cache_key] = AsyncOpenAI(api_key=key, base_url=base_url, timeout=12.0)
+        _provider_clients[cache_key] = AsyncOpenAI(api_key=key, base_url=base_url, timeout=25.0)
     return _provider_clients[cache_key]
 
 
@@ -629,22 +632,26 @@ async def chat(
 
         client = _get_client(provider)
         if client is None:
+            logger.warning("AI: %s — key not set, skipping", provider["name"])
             continue  # key not configured, skip
 
+        logger.info("AI: trying %s", provider["name"])
         try:
             # ── Agentic loop for this provider ────────────────────────────────
             loop_messages = list(messages)
-            for _ in range(10):
+            for iteration in range(10):
                 resp = await client.chat.completions.create(
                     model=provider["model"], messages=loop_messages, tools=tools,
                     tool_choice="auto", max_tokens=2048, temperature=0.3,
                 )
                 choice = resp.choices[0]
                 if choice.finish_reason != "tool_calls":
+                    logger.info("AI: %s answered after %d tool call(s)", provider["name"], iteration)
                     return ChatResponse(response=choice.message.content or "")
 
                 loop_messages.append(choice.message)
                 for tc in choice.message.tool_calls:
+                    logger.info("AI: tool_call=%s args=%s", tc.function.name, tc.function.arguments[:80])
                     try:
                         result = await run_tool(tc.function.name, json.loads(tc.function.arguments), current_user, db)
                     except Exception as e:
@@ -657,6 +664,7 @@ async def chat(
         except Exception as e:
             if _should_skip_provider(e):
                 last_error = f"{provider['name']}: {str(e)[:120]}"
+                logger.warning("AI: skip %s — %s", provider["name"], str(e)[:80])
                 _blacklist(provider["name"], seconds=300)  # skip for 5 min
                 continue  # try next provider
             raise HTTPException(status_code=502, detail=f"خطأ من {provider['name']}: {type(e).__name__}: {e}")
