@@ -1,7 +1,8 @@
 """
 DUMLIS - AI Chat Router
-Full agentic access: admins can read/write everything; students read their own data only.
-Uses direct DB queries — no HTTP self-calls.
+4-tool agentic architecture:
+  get_student_data / search_students / get_system_info / modify_data
+Pre-loads live system stats into every request — common questions need 0 tool calls.
 """
 import os
 import json
@@ -13,81 +14,61 @@ from datetime import date
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import OAuth2PasswordBearer
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.routers.auth import get_current_user, pwd_context
+from app.routers.auth import get_current_user
 from app import models
 
 router = APIRouter()
 ADMIN_ROLES = {"super_admin", "faculty_admin", "student_affairs"}
 
-# ── Provider registry (tried in order, skip on 429 / auth error) ──────────────
+# ── Provider registry ─────────────────────────────────────────────────────────
 PROVIDERS = [
-    # ── Gemini أولاً: أذكى في العربي + سريع (3-6ث) + 1M token/يوم ──────────
     {"env": "GEMINI_API_KEY",    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-     "model": "gemini-2.0-flash",           "name": "Gemini-2.0-Flash"},
+     "model": "gemini-2.0-flash",            "name": "Gemini-2.0-Flash"},
     {"env": "GEMINI_API_KEY",    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-     "model": "gemini-1.5-flash",           "name": "Gemini-1.5-Flash"},
-
-    # ── Cerebras-70B: سريع (hardware مخصص) + أدق من 8B ──────────────────────
+     "model": "gemini-1.5-flash",            "name": "Gemini-1.5-Flash"},
     {"env": "CEREBRAS_API_KEY",  "base_url": "https://api.cerebras.ai/v1",
-     "model": "llama3.3-70b",               "name": "Cerebras-70B"},
-
-    # ── Groq 70B: موثوق ──────────────────────────────────────────────────────
+     "model": "llama3.3-70b",                "name": "Cerebras-70B"},
     {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
-     "model": "llama-3.3-70b-versatile",   "name": "Groq-3.3-70B"},
+     "model": "llama-3.3-70b-versatile",    "name": "Groq-3.3-70B"},
     {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
-     "model": "llama-3.1-70b-versatile",   "name": "Groq-3.1-70B"},
-
-    # ── SambaNova: fallback ───────────────────────────────────────────────────
+     "model": "llama-3.1-70b-versatile",    "name": "Groq-3.1-70B"},
     {"env": "SAMBANOVA_API_KEY", "base_url": "https://api.sambanova.ai/v1",
      "model": "Meta-Llama-3.3-70B-Instruct","name": "SambaNova-70B"},
-
-    # ── Groq-8B كآخر ملجأ ───────────────────────────────────────────────────
     {"env": "GROQ_API_KEY",      "base_url": "https://api.groq.com/openai/v1",
-     "model": "llama-3.1-8b-instant",       "name": "Groq-8B"},
+     "model": "llama-3.1-8b-instant",        "name": "Groq-8B"},
 ]
+
 _provider_clients: dict[str, AsyncOpenAI] = {}
-_blacklisted_until: dict[str, float] = {}   # provider name → unix timestamp
+_blacklisted_until: dict[str, float] = {}
 
 
 def _blacklist(name: str, seconds: int = 30) -> None:
     import time
     _blacklisted_until[name] = time.time() + seconds
 
-
 def _blacklist_long(name: str) -> None:
-    _blacklist(name, seconds=120)  # 2 min for hard rate limits
-
+    _blacklist(name, seconds=120)
 
 def _is_blacklisted(name: str) -> bool:
     import time
     return time.time() < _blacklisted_until.get(name, 0)
 
-
 def _get_client(provider: dict) -> Optional[AsyncOpenAI]:
     key = os.getenv(provider["env"])
     if not key:
         return None
-    base_url = provider["base_url"]
-    if base_url is None:
-        # Cloudflare: build URL from account id
-        account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
-        if not account_id:
-            return None
-        base_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"
-    cache_key = f"{provider['env']}:{base_url}"
+    cache_key = f"{provider['env']}:{provider['base_url']}"
     if cache_key not in _provider_clients:
-        _provider_clients[cache_key] = AsyncOpenAI(api_key=key, base_url=base_url, timeout=25.0)
+        _provider_clients[cache_key] = AsyncOpenAI(
+            api_key=key, base_url=provider["base_url"], timeout=25.0)
     return _provider_clients[cache_key]
 
-
 def _should_skip_provider(e: Exception) -> bool:
-    """Return True for any API-level error that means 'try next provider'."""
     from openai import APITimeoutError, APIConnectionError
     if isinstance(e, (APITimeoutError, APIConnectionError)):
         return True
@@ -99,10 +80,8 @@ def _should_skip_provider(e: Exception) -> bool:
         "authentication", "decommissioned", "not_found", "notfound",
         "does not exist", "model_not_found", "no access",
         "tool_use_failed", "tool call validation", "parameters for tool",
-        "did not match schema",
-        "aierror", "bad input", "onematch", "oneof",
-        "type mismatch", "required properties",
-        "timeout", "timed out", "connection",
+        "did not match schema", "aierror", "bad input", "onematch", "oneof",
+        "type mismatch", "required properties", "timeout", "timed out", "connection",
     ])
 
 
@@ -119,50 +98,10 @@ class ChatResponse(BaseModel):
     response: str
 
 
-# ── Prompts ───────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
-ADMIN_SYSTEM = """أنت مساعد إداري ذكي لنظام DUMLIS الجامعي.
-
-## مسارات الأسئلة — أداة واحدة فقط إذا توفر الكود:
-- إحصائيات/عدد الطلاب → get_statistics
-- بيانات طالب بكوده → get_student(student_id)
-- مواد/تسجيلات طالب بكوده → list_enrollments(student_id)  ← count = الإجابة
-- درجات طالب بكوده → get_student_grades(student_id)
-- حضور طالب بكوده → get_student_attendance(student_id)
-- ماليات طالب بكوده → get_student_financial(student_id)
-- قائمة المواد → list_courses
-- قائمة القاعات → list_rooms
-- إعلانات → list_announcements
-- طلبات تسجيل → list_registration_requests
-- طلاب محجوبون → list_student_blocks
-- لجان → list_committees / موظفين → list_staff / مستخدمون → list_users
-
-## مسارات تحتاج خطوتين (اسم بدون كود):
-- أي سؤال عن طالب باسمه → search_students أولاً للحصول على student_id، ثم الأداة المناسبة
-  مثال: "كام مادة مسجل خالد؟" → search_students("خالد") → list_enrollments(student_id=النتيجة)
-  مثال: "درجات سارة" → search_students("سارة") → get_student_grades(student_id=النتيجة)
-- تعديل بيانات باسم → search_students ثم update_student
-- تعديل درجة → get_student_grades لجلب grade_id ثم update_grade
-
-## مسارات التعديل بكود معروف (خطوة واحدة):
-- تعديل GPA/حالة/بيانات → update_student(student_id, ...)
-- حجب → block_student / رفع حجب → unblock_student
-- إعلان جديد → create_announcement
-- قبول/رفض طلب → update_registration_request
-
-## قواعد:
-1. search_students لا تحتوي على بيانات المواد أو الدرجات — يجب استدعاء أداة ثانية بعدها.
-2. count في نتيجة أي أداة = العدد المطلوب مباشرة.
-3. بعد الأداة الأخيرة → أجب فوراً بالعربية.
-4. بعد أي تعديل، أكّد في جملة واحدة.
-"""
-
-STUDENT_SYSTEM = """أنت مساعد للطلاب في نظام DUMLIS — تعرض بيانات الطالب المسجّل فقط (قراءة فقط).
-تتحدث بالعربية دائماً. لا يمكنك تعديل أي بيانات أو الوصول لبيانات طلاب آخرين.
-"""
-
-
-# ── Tool helper ───────────────────────────────────────────────────────────────
+STUDENT_KEYS = ["student_id","name","faculty_id","department_id","level",
+                "status","fees_status","phone","email","gpa"]
 
 def _row(obj, keys=None) -> dict:
     cols = keys or [c.name for c in obj.__table__.columns]
@@ -176,89 +115,16 @@ def _row(obj, keys=None) -> dict:
         d[k] = val
     return d
 
-STUDENT_KEYS = ["student_id","name","faculty_id","department_id","level","status","fees_status","phone","email","gpa"]
-
-def _fn(name: str, desc: str, props: dict, required: list = None) -> dict:
+def _fn(name, desc, props, required=None):
     return {"type": "function", "function": {
         "name": name, "description": desc,
         "parameters": {"type": "object", "properties": props,
                        **({"required": required} if required else {})}}}
 
-
-# ── Tool Definitions ──────────────────────────────────────────────────────────
-
 def _s(t): return {"type": t}
-def _si(): return {"type": "integer"}
-def _sn(): return {"type": "number"}
-def _sb(): return {"type": "boolean"}
-
-ADMIN_TOOLS = [
-    _fn("search_students",   "بحث طلاب",      {"search": _s("string"), "faculty_id": _s("string"), "level": _si(), "status": _s("string"), "fees_status": _s("string"), "limit": _si()}),
-    _fn("get_student",       "بيانات طالب",   {"student_id": _s("string")}, ["student_id"]),
-    _fn("create_student",    "إنشاء طالب",    {"student_id": _s("string"), "name": _s("string"), "faculty_id": _s("string"), "level": _si(), "regulation": _s("string"), "national_id": _s("string"), "phone": _s("string"), "email": _s("string")}, ["student_id","name","faculty_id","level","regulation"]),
-    _fn("update_student",    "تعديل طالب",    {"student_id": _s("string"), "name": _s("string"), "status": _s("string"), "fees_status": _s("string"), "phone": _s("string"), "email": _s("string"), "level": _si(), "gpa": _sn(), "city": _s("string")}, ["student_id"]),
-    _fn("delete_student",    "حذف طالب",      {"student_id": _s("string")}, ["student_id"]),
-    _fn("block_student",     "حجب طالب",      {"student_id": _s("string"), "reason": _s("string"), "notes": _s("string")}, ["student_id","reason"]),
-    _fn("unblock_student",   "رفع الحجب",     {"student_id": _s("string")}, ["student_id"]),
-    _fn("list_student_blocks","الطلاب المحجوبون",{"faculty_id": _s("string"), "status": _s("string")}),
-
-    _fn("get_student_grades","درجات طالب",    {"student_id": _s("string"), "semester": _s("string")}, ["student_id"]),
-    _fn("update_grade",      "تعديل درجة",    {"grade_id": _si(), "midterm": _sn(), "final_exam": _sn(), "assignments": _sn(), "oral": _sn(), "practical": _sn(), "total": _sn(), "grade_letter": _s("string"), "grade_points": _sn()}, ["grade_id"]),
-    _fn("create_grade",      "إضافة درجة",    {"student_id": _s("string"), "course_id": _s("string"), "semester": _s("string"), "midterm": _sn(), "final_exam": _sn(), "total": _sn(), "grade_letter": _s("string")}, ["student_id","course_id","semester"]),
-
-    _fn("get_student_attendance","حضور طالب", {"student_id": _s("string"), "course_id": _s("string")}, ["student_id"]),
-    _fn("update_attendance", "تعديل حضور",    {"attendance_id": _si(), "status": _s("string"), "notes": _s("string")}, ["attendance_id","status"]),
-
-    _fn("get_student_financial","ماليات طالب",{"student_id": _s("string")}, ["student_id"]),
-    _fn("update_financial_record","تحديث مالية",{"record_id": _si(), "paid_amount": _sn(), "status": _s("string"), "receipt_no": _s("string")}, ["record_id"]),
-    _fn("list_financial_records","قائمة ماليات",{"faculty_id": _s("string"), "student_id": _s("string"), "status": _s("string"), "academic_year": _s("string"), "limit": _si()}),
-
-    _fn("list_enrollments",  "قائمة تسجيلات", {"student_id": _s("string"), "course_id": _s("string"), "semester": _s("string"), "faculty_id": _s("string"), "limit": _si()}),
-    _fn("create_enrollment", "تسجيل في مادة", {"student_id": _s("string"), "course_id": _s("string"), "semester": _s("string"), "faculty_id": _s("string")}, ["student_id","course_id","semester"]),
-    _fn("update_enrollment", "تعديل تسجيل",   {"enrollment_id": _si(), "status": _s("string")}, ["enrollment_id","status"]),
-    _fn("delete_enrollment", "حذف تسجيل",     {"enrollment_id": _si()}, ["enrollment_id"]),
-
-    _fn("list_courses",      "قائمة مواد",    {"faculty_id": _s("string"), "level": _si(), "semester": _s("string"), "limit": _si()}),
-    _fn("create_course",     "إنشاء مادة",    {"id": _s("string"), "name": _s("string"), "level": _si(), "faculty_id": _s("string"), "credit_hours": _si(), "course_type": _s("string"), "semester": _s("string")}, ["id","name","level","faculty_id"]),
-    _fn("update_course",     "تعديل مادة",    {"course_id": _s("string"), "name": _s("string"), "level": _si(), "credit_hours": _si(), "semester": _s("string"), "course_type": _s("string")}, ["course_id"]),
-    _fn("delete_course",     "حذف مادة",      {"course_id": _s("string")}, ["course_id"]),
-
-    _fn("list_faculties",    "قائمة الكليات", {}),
-    _fn("list_departments",  "قائمة الأقسام", {"faculty_id": _s("string")}),
-
-    _fn("list_rooms",        "قائمة القاعات", {"room_type": _s("string"), "status": _s("string")}),
-    _fn("update_room",       "تعديل قاعة",    {"room_id": _s("string"), "name": _s("string"), "capacity": _si(), "status": _s("string")}, ["room_id"]),
-
-    _fn("list_committees",   "قائمة اللجان",  {"faculty_id": _s("string"), "semester": _s("string")}),
-    _fn("update_committee",  "تعديل لجنة",    {"committee_id": _si(), "supervisor": _s("string"), "exam_date": _s("string"), "status": _s("string")}, ["committee_id"]),
-
-    _fn("list_registration_requests","طلبات التسجيل",{"faculty_id": _s("string"), "status": _s("string"), "limit": _si()}),
-    _fn("update_registration_request","قبول/رفض طلب",{"request_id": _s("string"), "status": _s("string"), "admin_response": _s("string")}, ["request_id","status"]),
-
-    _fn("list_announcements","قائمة إعلانات", {"faculty_id": _s("string")}),
-    _fn("create_announcement","إنشاء إعلان",  {"title": _s("string"), "body": _s("string"), "faculty_id": _s("string"), "priority": _s("string")}, ["title","body"]),
-    _fn("update_announcement","تعديل إعلان",  {"announcement_id": _s("string"), "title": _s("string"), "body": _s("string"), "is_active": _sb()}, ["announcement_id"]),
-    _fn("delete_announcement","حذف إعلان",    {"announcement_id": _s("string")}, ["announcement_id"]),
-
-    _fn("list_users",        "قائمة المستخدمين",{"faculty_id": _s("string"), "role": _s("string")}),
-    _fn("list_staff",        "قائمة الموظفين",  {"faculty_id": _s("string")}),
-
-    _fn("get_statistics",    "إحصائيات",      {"faculty_id": _s("string")}),
-    _fn("get_activity_logs", "سجل النشاطات",  {"faculty_id": _s("string"), "entity_type": _s("string"), "limit": _si()}),
-]
-
-STUDENT_TOOLS = [
-    _fn("get_my_profile",    "بياناتي",       {}),
-    _fn("get_my_grades",     "درجاتي",        {"semester": _s("string")}),
-    _fn("get_my_attendance", "حضوري",         {"course_id": _s("string")}),
-    _fn("get_my_financial",  "ماليتي",        {}),
-    _fn("get_my_schedule",   "جدولي",         {"semester": _s("string")}),
-    _fn("get_my_enrollments","موادي",          {"semester": _s("string")}),
-    _fn("list_announcements","الإعلانات",     {"faculty_id": _s("string")}),
-]
-
-
-# ── Tool Execution ────────────────────────────────────────────────────────────
+def _si():  return {"type": "integer"}
+def _sn():  return {"type": "number"}
+def _sb():  return {"type": "boolean"}
 
 def _int(v, default=None):
     try: return int(v)
@@ -268,394 +134,527 @@ def _float(v, default=None):
     try: return float(v)
     except (TypeError, ValueError): return default
 
-async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any:
-    # Coerce common mistyped params (LLM sometimes sends strings instead of numbers)
-    for k in ("limit", "level", "grade_id", "attendance_id", "record_id",
-              "enrollment_id", "committee_id"):
-        if k in args and args[k] is not None:
-            args[k] = _int(args[k])
-    for k in ("midterm", "final_exam", "assignments", "oral", "practical",
-              "total", "grade_points", "paid_amount", "gpa"):
-        if k in args and args[k] is not None:
-            args[k] = _float(args[k])
 
-    # ── Students ──────────────────────────────────────────────────────────────
-    if name == "search_students":
+# ── Live context builder ──────────────────────────────────────────────────────
+
+def _build_admin_context(db: Session) -> str:
+    """Injects live DB stats into every system prompt — answers general questions without tools."""
+    try:
+        total  = db.query(models.Student).count()
+        active = db.query(models.Student).filter(models.Student.status  == "مقيد").count()
+        unpaid = db.query(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
+
+        faculties = db.query(models.Faculty).all()
+        fac_list  = " | ".join(f.id for f in faculties) if faculties else "—"
+
+        ann_count = db.query(models.Announcement).filter(
+            models.Announcement.is_active == True).count()
+        pending   = db.query(models.RegistrationRequest).filter(
+            models.RegistrationRequest.status == "قيد المراجعة").count()
+
+        return (
+            f"\n[إحصائيات النظام — مُحدَّثة الآن]\n"
+            f"الطلاب: {total} إجمالي | {active} مقيد | {unpaid} غير مسدد الرسوم\n"
+            f"الكليات: {fac_list}\n"
+            f"إعلانات نشطة: {ann_count} | طلبات تسجيل معلّقة: {pending}\n"
+        )
+    except Exception:
+        return ""
+
+
+# ── System Prompts ────────────────────────────────────────────────────────────
+
+ADMIN_SYSTEM_BASE = """أنت مساعد إداري ذكي لنظام DUMLIS الجامعي. تتحدث بالعربية دائماً وبشكل ودود.
+
+## أدواتك الأربع — استخدم الأقل منها:
+
+**get_student_data(query)**
+← اسم الطالب أو كوده → يُرجع كل شيء: ملف + تسجيلات + درجات + حضور + ماليات
+← استخدم لأي سؤال عن طالب محدد (بالاسم أو الكود)
+
+**search_students(search, faculty_id?, status?, fees_status?, level?, limit?)**
+← لعرض قائمة بأكثر من طالب في نفس الوقت
+
+**get_system_info(type, faculty_id?)**
+← type: "announcements" | "courses" | "requests" | "rooms" | "committees" | "staff" | "users"
+← للأسئلة عن القوائم العامة
+
+**modify_data(entity, action, id?, fields?)**
+← entity: student | grade | enrollment | financial | attendance | announcement | request | room | course | committee
+← action: update | create | delete | block | unblock | approve | reject
+← للتعديل والإضافة والحذف
+
+## قواعد:
+- الإحصائيات العامة (عدد الطلاب، الكليات...) موجودة في السياق أدناه — أجب مباشرة بدون أدوات
+- سؤال عن طالب بالاسم أو الكود → get_student_data مرة واحدة فقط (تُرجع كل شيء)
+- بعد الأداة الأخيرة → أجب فوراً بالعربية بشكل واضح ومختصر
+- بعد أي تعديل → أكّد في جملة واحدة
+- لو السؤال مش تقني → ارد بشكل طبيعي بدون أدوات
+"""
+
+STUDENT_SYSTEM = """أنت مساعد للطلاب في نظام DUMLIS — تعرض بيانات الطالب المسجّل فقط (قراءة فقط).
+تتحدث بالعربية دائماً. لا يمكنك تعديل أي بيانات أو الوصول لبيانات طلاب آخرين.
+"""
+
+
+# ── Tool Definitions ──────────────────────────────────────────────────────────
+
+ADMIN_TOOLS = [
+    _fn("get_student_data",
+        "جلب كل بيانات طالب دفعة واحدة: ملف + تسجيلات + درجات + حضور + ماليات. يقبل اسم الطالب أو كوده.",
+        {"query": _s("string"), "faculty_id": _s("string")},
+        ["query"]),
+
+    _fn("search_students",
+        "بحث وعرض قائمة بأكثر من طالب. للطالب الواحد استخدم get_student_data.",
+        {"search": _s("string"), "faculty_id": _s("string"), "level": _si(),
+         "status": _s("string"), "fees_status": _s("string"), "limit": _si()}),
+
+    _fn("get_system_info",
+        "جلب قوائم النظام. type: announcements|courses|requests|rooms|committees|staff|users",
+        {"type": _s("string"), "faculty_id": _s("string")},
+        ["type"]),
+
+    _fn("modify_data",
+        ("تعديل أي بيانات في النظام.\n"
+         "entity: student|grade|enrollment|financial|attendance|announcement|request|room|course|committee\n"
+         "action: update|create|delete|block|unblock|approve|reject\n"
+         "id: معرّف العنصر المراد تعديله\n"
+         "fields: كائن يحتوي البيانات المراد تعديلها أو إضافتها"),
+        {"entity":  _s("string"),
+         "action":  _s("string"),
+         "id":      _s("string"),
+         "fields":  {"type": "object", "additionalProperties": True}},
+        ["entity", "action"]),
+]
+
+STUDENT_TOOLS = [
+    _fn("get_my_profile",    "بياناتي الشخصية", {}),
+    _fn("get_my_grades",     "درجاتي",           {"semester": _s("string")}),
+    _fn("get_my_attendance", "حضوري",            {"course_id": _s("string")}),
+    _fn("get_my_financial",  "ماليتي",           {}),
+    _fn("get_my_schedule",   "جدولي الدراسي",    {"semester": _s("string")}),
+    _fn("get_my_enrollments","موادي المسجّلة",   {"semester": _s("string")}),
+    _fn("list_announcements","الإعلانات",        {"faculty_id": _s("string")}),
+]
+
+
+# ── Tool Execution ────────────────────────────────────────────────────────────
+
+def _resolve_student(query: str, db: Session):
+    """Resolve name or student_id → (student_obj, error_dict). One is None."""
+    s = db.get(models.Student, query)
+    if s:
+        return s, None
+    rows = db.query(models.Student).filter(
+        models.Student.name.ilike(f"%{query}%")
+    ).limit(5).all()
+    if not rows:
+        return None, {"error": f"لا يوجد طالب باسم أو كود '{query}'"}
+    if len(rows) > 1:
+        return None, {
+            "multiple_found": True,
+            "count": len(rows),
+            "students": [_row(s, STUDENT_KEYS) for s in rows],
+            "note": "وُجد أكثر من طالب — حدد الكود أو الاسم الكامل"
+        }
+    return rows[0], None
+
+
+async def run_tool(name: str, args: dict, user: models.User, db: Session) -> Any:
+
+    # ── get_student_data ──────────────────────────────────────────────────────
+    if name == "get_student_data":
+        student, err = _resolve_student(args["query"], db)
+        if err:
+            return err
+        sid = student.student_id
+
+        enrollments = db.query(models.Enrollment).filter(
+            models.Enrollment.student_id == sid).all()
+
+        grades = db.query(models.Grade).filter(
+            models.Grade.student_id == sid).all()
+
+        att_rows = db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.student_id == sid).limit(200).all()
+        present = sum(1 for r in att_rows if r.status == "حاضر")
+
+        fin_rows = db.query(models.FinancialRecord).filter(
+            models.FinancialRecord.student_id == sid).all()
+        total_due  = sum(float(r.amount or 0)      for r in fin_rows)
+        total_paid = sum(float(r.paid_amount or 0) for r in fin_rows)
+
+        logger.info("AI: get_student_data(%s) → enrollments=%d grades=%d",
+                    sid, len(enrollments), len(grades))
+        return {
+            "student": _row(student, STUDENT_KEYS),
+            "enrollments": {
+                "count": len(enrollments),
+                "courses": [{"course_id": e.course_id, "semester": e.semester,
+                              "status": e.status} for e in enrollments]
+            },
+            "grades": {
+                "count": len(grades),
+                "list": [{"id": g.id, "course_id": g.course_id, "semester": g.semester,
+                           "total": g.total, "letter": g.grade_letter} for g in grades]
+            },
+            "attendance": {
+                "total": len(att_rows), "present": present,
+                "absent": len(att_rows) - present,
+                "rate_pct": round(present / len(att_rows) * 100, 1) if att_rows else 0
+            },
+            "financial": {
+                "total_due": total_due, "total_paid": total_paid,
+                "remaining": round(total_due - total_paid, 2),
+                "status": student.fees_status
+            }
+        }
+
+    # ── search_students ───────────────────────────────────────────────────────
+    elif name == "search_students":
         q = db.query(models.Student)
         if args.get("search"):
             t = f"%{args['search']}%"
             q = q.filter(models.Student.name.ilike(t) | models.Student.student_id.ilike(t))
-        if args.get("faculty_id"):  q = q.filter(models.Student.faculty_id == args["faculty_id"])
-        if args.get("level"):       q = q.filter(models.Student.level == args["level"])
-        if args.get("status"):      q = q.filter(models.Student.status == args["status"])
-        if args.get("fees_status"): q = q.filter(models.Student.fees_status == args["fees_status"])
-        rows = q.limit(min(args.get("limit", 10), 15)).all()
+        if args.get("faculty_id"):  q = q.filter(models.Student.faculty_id  == args["faculty_id"])
+        if args.get("level"):       q = q.filter(models.Student.level        == _int(args["level"]))
+        if args.get("status"):      q = q.filter(models.Student.status       == args["status"])
+        if args.get("fees_status"): q = q.filter(models.Student.fees_status  == args["fees_status"])
+        rows = q.limit(min(_int(args.get("limit"), 10), 15)).all()
         return {"count": len(rows), "students": [_row(s, STUDENT_KEYS) for s in rows]}
 
-    elif name == "get_student":
-        s = db.get(models.Student, args["student_id"])
-        return _row(s, STUDENT_KEYS) if s else {"error": "الطالب غير موجود"}
+    # ── get_system_info ───────────────────────────────────────────────────────
+    elif name == "get_system_info":
+        t   = (args.get("type") or "").lower()
+        fid = args.get("faculty_id")
+        result: dict = {}
 
-    elif name == "create_student":
-        s = models.Student(**{k: v for k, v in args.items() if v is not None})
-        db.add(s); db.commit()
-        return {"success": True, "student": _row(s)}
+        if t == "announcements":
+            q = db.query(models.Announcement).filter(models.Announcement.is_active == True)
+            if fid: q = q.filter(models.Announcement.faculty_id == fid)
+            rows = q.order_by(models.Announcement.created_at.desc()).limit(15).all()
+            ANN_KEYS = ["id","title","body","priority","created_at","faculty_id"]
+            result = {"count": len(rows), "announcements": [_row(a, ANN_KEYS) for a in rows]}
 
-    elif name == "update_student":
-        s = db.get(models.Student, args["student_id"])
-        if not s: return {"error": "الطالب غير موجود"}
-        for f in ("name","status","fees_status","phone","email","level","gpa","city"):
-            if args.get(f) is not None: setattr(s, f, args[f])
-        db.commit()
-        return {"success": True, "student_id": s.student_id, "gpa": s.gpa, "status": s.status}
+        elif t == "courses":
+            q = db.query(models.Course)
+            if fid: q = q.filter(models.Course.faculty_id == fid)
+            rows = q.limit(60).all()
+            COURSE_KEYS = ["id","name","level","credit_hours","semester","course_type"]
+            result = {"count": len(rows), "courses": [_row(c, COURSE_KEYS) for c in rows]}
 
-    elif name == "delete_student":
-        s = db.get(models.Student, args["student_id"])
-        if not s: return {"error": "الطالب غير موجود"}
-        db.delete(s); db.commit()
-        return {"success": True, "deleted": args["student_id"]}
+        elif t == "requests":
+            q = db.query(models.RegistrationRequest)
+            if fid: q = q.filter(models.RegistrationRequest.faculty_id == fid)
+            rows = q.order_by(models.RegistrationRequest.created_at.desc()).limit(30).all()
+            REQ_KEYS = ["id","student_id","request_type","status","created_at","admin_response"]
+            result = {"count": len(rows), "requests": [_row(r, REQ_KEYS) for r in rows]}
 
-    elif name == "block_student":
-        b = models.StudentBlock(
-            student_id=args["student_id"],
-            reason=args["reason"],
-            notes=args.get("notes"),
-            faculty_id=user.faculty_id,
-            blocked_by=user.id,
-        )
-        db.add(b); db.commit()
-        return {"success": True, "block_id": b.id}
+        elif t == "rooms":
+            rows = db.query(models.Room).limit(50).all()
+            ROOM_KEYS = ["id","name","capacity","room_type","status"]
+            result = {"count": len(rows), "rooms": [_row(r, ROOM_KEYS) for r in rows]}
 
-    elif name == "unblock_student":
-        b = db.query(models.StudentBlock).filter(
-            models.StudentBlock.student_id == args["student_id"],
-            models.StudentBlock.status == "محجوب"
-        ).first()
-        if not b: return {"error": "لا يوجد حجب نشط لهذا الطالب"}
-        b.status = "مرفوع"
-        db.commit()
-        return {"success": True}
+        elif t == "committees":
+            q = db.query(models.Committee)
+            if fid: q = q.filter(models.Committee.faculty_id == fid)
+            rows = q.limit(30).all()
+            COM_KEYS = ["id","faculty_id","semester","supervisor","status","exam_date"]
+            result = {"count": len(rows), "committees": [_row(c, COM_KEYS) for c in rows]}
 
-    elif name == "list_student_blocks":
-        q = db.query(models.StudentBlock)
-        if args.get("faculty_id"): q = q.filter(models.StudentBlock.faculty_id == args["faculty_id"])
-        if args.get("status"):     q = q.filter(models.StudentBlock.status == args["status"])
-        rows = q.limit(50).all()
-        BLOCK_KEYS = ["id","student_id","reason","status","blocked_at"]
-        return {"count": len(rows), "blocks": [_row(r, BLOCK_KEYS) for r in rows]}
+        elif t == "staff":
+            q = db.query(models.Staff)
+            if fid: q = q.filter(models.Staff.faculty_id == fid)
+            rows = q.limit(50).all()
+            STAFF_KEYS = ["id","name","faculty_id","department_id","position","email"]
+            result = {"count": len(rows), "staff": [_row(s, STAFF_KEYS) for s in rows]}
 
-    # ── Grades ────────────────────────────────────────────────────────────────
-    elif name == "get_student_grades":
-        q = db.query(models.Grade).filter(models.Grade.student_id == args["student_id"])
-        if args.get("semester"): q = q.filter(models.Grade.semester == args["semester"])
-        rows = q.all()
-        return {"count": len(rows), "grades": [_row(g, ["id","student_id","course_id","semester","midterm","final_exam","total","grade_letter","grade_points"]) for g in rows]}
+        elif t == "users":
+            q = db.query(models.User)
+            if fid: q = q.filter(models.User.faculty_id == fid)
+            rows = q.limit(50).all()
+            USER_KEYS = ["id","username","role","faculty_id","is_active"]
+            result = {"count": len(rows), "users": [_row(u, USER_KEYS) for u in rows]}
 
-    elif name == "update_grade":
-        g = db.get(models.Grade, args["grade_id"])
-        if not g: return {"error": "الدرجة غير موجودة"}
-        for f in ("midterm","final_exam","assignments","oral","practical","total","grade_letter","grade_points"):
-            if args.get(f) is not None: setattr(g, f, args[f])
-        db.commit()
-        return {"success": True, "grade": _row(g)}
+        else:
+            result = {"error": f"type غير معروف: {t}. استخدم: announcements|courses|requests|rooms|committees|staff|users"}
 
-    elif name == "create_grade":
-        g = models.Grade(**{k: v for k, v in args.items() if v is not None})
-        db.add(g); db.commit()
-        return {"success": True, "grade": _row(g)}
+        return result
 
-    # ── Attendance ────────────────────────────────────────────────────────────
-    elif name == "get_student_attendance":
-        q = db.query(models.AttendanceRecord).filter(
-            models.AttendanceRecord.student_id == args["student_id"])
-        if args.get("course_id"): q = q.filter(models.AttendanceRecord.course_id == args["course_id"])
-        rows = q.order_by(models.AttendanceRecord.attendance_date.desc()).limit(100).all()
-        present = sum(1 for r in rows if r.status == "حاضر")
-        return {"total": len(rows), "present": present, "absent": len(rows)-present,
-                "rate": round(present/len(rows)*100,1) if rows else 0}
+    # ── modify_data ───────────────────────────────────────────────────────────
+    elif name == "modify_data":
+        entity = (args.get("entity") or "").lower()
+        action = (args.get("action") or "update").lower()
+        eid    = args.get("id")
+        fields = args.get("fields") or {}
 
-    elif name == "update_attendance":
-        r = db.get(models.AttendanceRecord, args["attendance_id"])
-        if not r: return {"error": "السجل غير موجود"}
-        r.status = args["status"]
-        if args.get("notes"): r.notes = args["notes"]
-        db.commit()
-        return {"success": True, "record": _row(r)}
+        # Coerce numeric types
+        for k in ("level", "capacity"):
+            if k in fields: fields[k] = _int(fields[k])
+        for k in ("midterm","final_exam","assignments","oral","practical",
+                  "total","grade_points","paid_amount","gpa"):
+            if k in fields: fields[k] = _float(fields[k])
 
-    # ── Financial ─────────────────────────────────────────────────────────────
-    elif name == "get_student_financial":
-        rows = db.query(models.FinancialRecord).filter(
-            models.FinancialRecord.student_id == args["student_id"]).all()
-        total_due  = sum(float(r.amount or 0) for r in rows)
-        total_paid = sum(float(r.paid_amount or 0) for r in rows)
-        FIN_KEYS = ["id","academic_year","amount","paid_amount","status","receipt_no"]
-        return {"count": len(rows), "total_due": total_due, "total_paid": total_paid,
-                "remaining": round(total_due-total_paid, 2),
-                "records": [_row(r, FIN_KEYS) for r in rows]}
+        # ── student ───────────────────────────────────────────────────────────
+        if entity == "student":
+            if action == "create":
+                sid = eid or fields.get("student_id")
+                s = models.Student(**{k: v for k, v in fields.items() if v is not None})
+                if sid and not getattr(s, "student_id", None):
+                    s.student_id = sid
+                db.add(s); db.commit()
+                return {"success": True, "student_id": s.student_id}
 
-    elif name == "update_financial_record":
-        r = db.get(models.FinancialRecord, args["record_id"])
-        if not r: return {"error": "السجل غير موجود"}
-        for f in ("paid_amount","status","receipt_no"):
-            if args.get(f) is not None: setattr(r, f, args[f])
-        db.commit()
-        return {"success": True, "record": _row(r)}
+            elif action == "delete":
+                s = db.get(models.Student, eid)
+                if not s: return {"error": "الطالب غير موجود"}
+                db.delete(s); db.commit()
+                return {"success": True, "deleted": eid}
 
-    elif name == "list_financial_records":
-        q = db.query(models.FinancialRecord)
-        if args.get("faculty_id"):    q = q.filter(models.FinancialRecord.faculty_id == args["faculty_id"])
-        if args.get("student_id"):    q = q.filter(models.FinancialRecord.student_id == args["student_id"])
-        if args.get("status"):        q = q.filter(models.FinancialRecord.status == args["status"])
-        if args.get("academic_year"): q = q.filter(models.FinancialRecord.academic_year == args["academic_year"])
-        rows = q.limit(args.get("limit", 50)).all()
-        FIN_KEYS = ["id","student_id","academic_year","amount","paid_amount","status","receipt_no"]
-        return {"count": len(rows), "records": [_row(r, FIN_KEYS) for r in rows]}
+            elif action == "block":
+                b = models.StudentBlock(
+                    student_id=eid,
+                    reason=fields.get("reason", ""),
+                    notes=fields.get("notes"),
+                    faculty_id=user.faculty_id,
+                    blocked_by=user.id,
+                )
+                db.add(b); db.commit()
+                return {"success": True, "block_id": b.id}
 
-    # ── Enrollments ───────────────────────────────────────────────────────────
-    elif name == "list_enrollments":
-        q = db.query(models.Enrollment)
-        if args.get("student_id"): q = q.filter(models.Enrollment.student_id == args["student_id"])
-        if args.get("course_id"):  q = q.filter(models.Enrollment.course_id == args["course_id"])
-        if args.get("semester"):   q = q.filter(models.Enrollment.semester == args["semester"])
-        if args.get("faculty_id"): q = q.filter(models.Enrollment.faculty_id == args["faculty_id"])
-        rows = q.limit(args.get("limit", 50)).all()
-        logger.info("AI: list_enrollments student_id=%s semester=%s → %d rows",
-                    args.get("student_id"), args.get("semester"), len(rows))
-        return {
-            "count": len(rows),
-            "courses_registered": [r.course_id for r in rows],
-            "queried_student_id": args.get("student_id"),
-        }
+            elif action == "unblock":
+                b = db.query(models.StudentBlock).filter(
+                    models.StudentBlock.student_id == eid,
+                    models.StudentBlock.status == "محجوب"
+                ).first()
+                if not b: return {"error": "لا يوجد حجب نشط لهذا الطالب"}
+                b.status = "مرفوع"; db.commit()
+                return {"success": True}
 
-    elif name == "create_enrollment":
-        e = models.Enrollment(
-            student_id=args["student_id"],
-            course_id=args["course_id"],
-            semester=args["semester"],
-            faculty_id=args.get("faculty_id"),
-            status="مسجل",
-        )
-        db.add(e); db.commit()
-        return {"success": True, "enrollment": _row(e)}
+            else:  # update
+                s = db.get(models.Student, eid)
+                if not s: return {"error": "الطالب غير موجود"}
+                for f in ("name","status","fees_status","phone","email","level","gpa","city"):
+                    if fields.get(f) is not None: setattr(s, f, fields[f])
+                db.commit()
+                return {"success": True, "student_id": s.student_id,
+                        "gpa": s.gpa, "status": s.status}
 
-    elif name == "update_enrollment":
-        e = db.get(models.Enrollment, args["enrollment_id"])
-        if not e: return {"error": "التسجيل غير موجود"}
-        e.status = args["status"]
-        db.commit()
-        return {"success": True, "enrollment": _row(e)}
+        # ── grade ─────────────────────────────────────────────────────────────
+        elif entity == "grade":
+            if action == "create":
+                g = models.Grade(
+                    student_id=fields.get("student_id", eid),
+                    course_id=fields["course_id"],
+                    semester=fields.get("semester", ""),
+                    **{k: fields[k] for k in
+                       ("midterm","final_exam","assignments","oral","practical",
+                        "total","grade_letter","grade_points") if k in fields}
+                )
+                db.add(g); db.commit()
+                return {"success": True, "grade_id": g.id}
+            else:
+                g = db.get(models.Grade, _int(eid))
+                if not g: return {"error": f"الدرجة {eid} غير موجودة"}
+                for f in ("midterm","final_exam","assignments","oral","practical",
+                          "total","grade_letter","grade_points"):
+                    if fields.get(f) is not None: setattr(g, f, fields[f])
+                db.commit()
+                return {"success": True, "grade": _row(g)}
 
-    elif name == "delete_enrollment":
-        e = db.get(models.Enrollment, args["enrollment_id"])
-        if not e: return {"error": "التسجيل غير موجود"}
-        db.delete(e); db.commit()
-        return {"success": True}
+        # ── enrollment ────────────────────────────────────────────────────────
+        elif entity == "enrollment":
+            if action == "create":
+                e = models.Enrollment(
+                    student_id=fields.get("student_id", eid),
+                    course_id=fields["course_id"],
+                    semester=fields.get("semester", ""),
+                    faculty_id=fields.get("faculty_id"),
+                    status="مسجل",
+                )
+                db.add(e); db.commit()
+                return {"success": True, "enrollment_id": e.id}
+            elif action == "delete":
+                e = db.get(models.Enrollment, _int(eid))
+                if not e: return {"error": "التسجيل غير موجود"}
+                db.delete(e); db.commit()
+                return {"success": True}
+            else:
+                e = db.get(models.Enrollment, _int(eid))
+                if not e: return {"error": "التسجيل غير موجود"}
+                if fields.get("status"): e.status = fields["status"]
+                db.commit()
+                return {"success": True}
 
-    # ── Courses ───────────────────────────────────────────────────────────────
-    elif name == "list_courses":
-        q = db.query(models.Course)
-        if args.get("faculty_id"): q = q.filter(models.Course.faculty_id == args["faculty_id"])
-        if args.get("level"):      q = q.filter(models.Course.level == args["level"])
-        if args.get("semester"):   q = q.filter(models.Course.semester == args["semester"])
-        rows = q.limit(args.get("limit", 50)).all()
-        COURSE_KEYS = ["id","name","level","credit_hours","semester","course_type"]
-        return {"count": len(rows), "courses": [_row(c, COURSE_KEYS) for c in rows]}
+        # ── financial ─────────────────────────────────────────────────────────
+        elif entity == "financial":
+            r = db.get(models.FinancialRecord, _int(eid))
+            if not r: return {"error": "السجل المالي غير موجود"}
+            for f in ("paid_amount","status","receipt_no"):
+                if fields.get(f) is not None: setattr(r, f, fields[f])
+            db.commit()
+            return {"success": True}
 
-    elif name == "create_course":
-        c = models.Course(**{k: v for k, v in args.items() if v is not None})
-        db.add(c); db.commit()
-        return {"success": True, "course": _row(c)}
+        # ── attendance ────────────────────────────────────────────────────────
+        elif entity == "attendance":
+            r = db.get(models.AttendanceRecord, _int(eid))
+            if not r: return {"error": "سجل الحضور غير موجود"}
+            if fields.get("status"): r.status = fields["status"]
+            if fields.get("notes"):  r.notes  = fields["notes"]
+            db.commit()
+            return {"success": True}
 
-    elif name == "update_course":
-        c = db.get(models.Course, args["course_id"])
-        if not c: return {"error": "المادة غير موجودة"}
-        for f in ("name","level","credit_hours","semester","course_type"):
-            if args.get(f) is not None: setattr(c, f, args[f])
-        db.commit()
-        return {"success": True, "course": _row(c)}
+        # ── announcement ──────────────────────────────────────────────────────
+        elif entity == "announcement":
+            if action == "create":
+                a = models.Announcement(
+                    title=fields["title"],
+                    body=fields.get("body", ""),
+                    faculty_id=fields.get("faculty_id"),
+                    priority=fields.get("priority", "عادي"),
+                    is_active=True,
+                )
+                db.add(a); db.commit()
+                return {"success": True, "id": str(a.id)}
+            elif action == "delete":
+                try:
+                    a = db.get(models.Announcement, _uuid.UUID(eid))
+                except Exception:
+                    return {"error": "معرّف الإعلان غير صحيح"}
+                if not a: return {"error": "الإعلان غير موجود"}
+                db.delete(a); db.commit()
+                return {"success": True}
+            else:
+                try:
+                    a = db.get(models.Announcement, _uuid.UUID(eid))
+                except Exception:
+                    return {"error": "معرّف الإعلان غير صحيح"}
+                if not a: return {"error": "الإعلان غير موجود"}
+                for f in ("title","body","is_active"):
+                    if fields.get(f) is not None: setattr(a, f, fields[f])
+                db.commit()
+                return {"success": True}
 
-    elif name == "delete_course":
-        c = db.get(models.Course, args["course_id"])
-        if not c: return {"error": "المادة غير موجودة"}
-        db.delete(c); db.commit()
-        return {"success": True}
+        # ── registration request ──────────────────────────────────────────────
+        elif entity == "request":
+            r = db.get(models.RegistrationRequest, eid)
+            if not r: return {"error": "الطلب غير موجود"}
+            if action == "approve":
+                r.status = "مقبول"
+            elif action == "reject":
+                r.status = "مرفوض"
+            elif fields.get("status"):
+                r.status = fields["status"]
+            if fields.get("admin_response"): r.admin_response = fields["admin_response"]
+            db.commit()
+            return {"success": True, "status": r.status}
 
-    # ── Faculties & Departments ────────────────────────────────────────────────
-    elif name == "list_faculties":
-        rows = db.query(models.Faculty).all()
-        return {"count": len(rows), "faculties": [_row(f) for f in rows]}
+        # ── room ──────────────────────────────────────────────────────────────
+        elif entity == "room":
+            r = db.get(models.Room, eid)
+            if not r: return {"error": "القاعة غير موجودة"}
+            for f in ("name","capacity","status"):
+                if fields.get(f) is not None: setattr(r, f, fields[f])
+            db.commit()
+            return {"success": True}
 
-    elif name == "list_departments":
-        q = db.query(models.Department)
-        if args.get("faculty_id"): q = q.filter(models.Department.faculty_id == args["faculty_id"])
-        rows = q.all()
-        return {"count": len(rows), "departments": [_row(d) for d in rows]}
+        # ── course ────────────────────────────────────────────────────────────
+        elif entity == "course":
+            if action == "create":
+                c = models.Course(**{k: v for k, v in fields.items() if v is not None})
+                if eid and not fields.get("id"): c.id = eid
+                db.add(c); db.commit()
+                return {"success": True, "course_id": c.id}
+            elif action == "delete":
+                c = db.get(models.Course, eid)
+                if not c: return {"error": "المادة غير موجودة"}
+                db.delete(c); db.commit()
+                return {"success": True}
+            else:
+                c = db.get(models.Course, eid)
+                if not c: return {"error": "المادة غير موجودة"}
+                for f in ("name","level","credit_hours","semester","course_type"):
+                    if fields.get(f) is not None: setattr(c, f, fields[f])
+                db.commit()
+                return {"success": True}
 
-    # ── Rooms ─────────────────────────────────────────────────────────────────
-    elif name == "list_rooms":
-        q = db.query(models.Room)
-        if args.get("room_type"): q = q.filter(models.Room.room_type == args["room_type"])
-        if args.get("status"):    q = q.filter(models.Room.status == args["status"])
-        rows = q.limit(50).all()
-        ROOM_KEYS = ["id","name","capacity","room_type","status"]
-        return {"count": len(rows), "rooms": [_row(r, ROOM_KEYS) for r in rows]}
+        # ── committee ─────────────────────────────────────────────────────────
+        elif entity == "committee":
+            c = db.get(models.Committee, _int(eid))
+            if not c: return {"error": "اللجنة غير موجودة"}
+            if fields.get("supervisor"): c.supervisor = fields["supervisor"]
+            if fields.get("status"):     c.status     = fields["status"]
+            if fields.get("exam_date"):
+                try: c.exam_date = date.fromisoformat(fields["exam_date"])
+                except ValueError: pass
+            db.commit()
+            return {"success": True}
 
-    elif name == "update_room":
-        r = db.get(models.Room, args["room_id"])
-        if not r: return {"error": "القاعة غير موجودة"}
-        for f in ("name","capacity","status"):
-            if args.get(f) is not None: setattr(r, f, args[f])
-        db.commit()
-        return {"success": True, "room": _row(r)}
+        return {"error": f"entity غير معروف: '{entity}'. الخيارات: student|grade|enrollment|financial|attendance|announcement|request|room|course|committee"}
 
-    # ── Committees ────────────────────────────────────────────────────────────
-    elif name == "list_committees":
-        q = db.query(models.Committee)
-        if args.get("faculty_id"): q = q.filter(models.Committee.faculty_id == args["faculty_id"])
-        if args.get("semester"):   q = q.filter(models.Committee.semester == args["semester"])
-        rows = q.limit(50).all()
-        COM_KEYS = ["id","faculty_id","semester","supervisor","status","exam_date"]
-        return {"count": len(rows), "committees": [_row(c, COM_KEYS) for c in rows]}
-
-    elif name == "update_committee":
-        c = db.get(models.Committee, args["committee_id"])
-        if not c: return {"error": "اللجنة غير موجودة"}
-        if args.get("supervisor"): c.supervisor = args["supervisor"]
-        if args.get("status"):     c.status = args["status"]
-        if args.get("exam_date"):  c.exam_date = date.fromisoformat(args["exam_date"])
-        db.commit()
-        return {"success": True, "committee": _row(c)}
-
-    # ── Registration Requests ─────────────────────────────────────────────────
-    elif name == "list_registration_requests":
-        q = db.query(models.RegistrationRequest)
-        if args.get("faculty_id"): q = q.filter(models.RegistrationRequest.faculty_id == args["faculty_id"])
-        if args.get("status"):     q = q.filter(models.RegistrationRequest.status == args["status"])
-        rows = q.order_by(models.RegistrationRequest.created_at.desc()).limit(args.get("limit", 50)).all()
-        REQ_KEYS = ["id","student_id","request_type","status","created_at","admin_response"]
-        return {"count": len(rows), "requests": [_row(r, REQ_KEYS) for r in rows]}
-
-    elif name == "update_registration_request":
-        r = db.get(models.RegistrationRequest, args["request_id"])
-        if not r: return {"error": "الطلب غير موجود"}
-        r.status = args["status"]
-        if args.get("admin_response"): r.admin_response = args["admin_response"]
-        db.commit()
-        return {"success": True, "request": _row(r)}
-
-    # ── Announcements ─────────────────────────────────────────────────────────
-    elif name == "list_announcements":
-        q = db.query(models.Announcement).filter(models.Announcement.is_active == True)
-        if args.get("faculty_id"): q = q.filter(models.Announcement.faculty_id == args["faculty_id"])
-        rows = q.order_by(models.Announcement.created_at.desc()).limit(20).all()
-        ANN_KEYS = ["id","title","priority","created_at","faculty_id"]
-        return {"count": len(rows), "announcements": [_row(a, ANN_KEYS) for a in rows]}
-
-    elif name == "create_announcement":
-        a = models.Announcement(
-            title=args["title"], body=args["body"],
-            faculty_id=args.get("faculty_id"),
-            priority=args.get("priority", "عادي"),
-            is_active=True,
-        )
-        db.add(a); db.commit()
-        return {"success": True, "id": str(a.id)}
-
-    elif name == "update_announcement":
-        a = db.get(models.Announcement, _uuid.UUID(args["announcement_id"]))
-        if not a: return {"error": "الإعلان غير موجود"}
-        for f in ("title","body","is_active"):
-            if args.get(f) is not None: setattr(a, f, args[f])
-        db.commit()
-        return {"success": True, "announcement": _row(a)}
-
-    elif name == "delete_announcement":
-        a = db.get(models.Announcement, _uuid.UUID(args["announcement_id"]))
-        if not a: return {"error": "الإعلان غير موجود"}
-        db.delete(a); db.commit()
-        return {"success": True}
-
-    # ── Users & Staff ─────────────────────────────────────────────────────────
-    elif name == "list_users":
-        q = db.query(models.User)
-        if args.get("faculty_id"): q = q.filter(models.User.faculty_id == args["faculty_id"])
-        if args.get("role"):       q = q.filter(models.User.role == args["role"])
-        rows = q.limit(50).all()
-        # exclude hashed_password
-        USER_KEYS = ["id","username","role","faculty_id","is_active"]
-        return {"count": len(rows), "users": [_row(u, USER_KEYS) for u in rows]}
-
-    elif name == "list_staff":
-        q = db.query(models.Staff)
-        if args.get("faculty_id"): q = q.filter(models.Staff.faculty_id == args["faculty_id"])
-        rows = q.limit(50).all()
-        STAFF_KEYS = ["id","name","faculty_id","department_id","position","email"]
-        return {"count": len(rows), "staff": [_row(s, STAFF_KEYS) for s in rows]}
-
-    # ── Statistics & Logs ─────────────────────────────────────────────────────
-    elif name == "get_statistics":
-        q = db.query(models.Student)
-        if args.get("faculty_id"): q = q.filter(models.Student.faculty_id == args["faculty_id"])
-        total   = q.count()
-        active  = q.filter(models.Student.status == "مقيد").count()
-        paid    = q.filter(models.Student.fees_status == "مسدد").count()
-        unpaid  = q.filter(models.Student.fees_status == "غير مسدد").count()
-        return {"total": total, "active": active, "paid_fees": paid, "unpaid_fees": unpaid}
-
-    elif name == "get_activity_logs":
-        q = db.query(models.ActivityLog)
-        if args.get("faculty_id"):  q = q.filter(models.ActivityLog.faculty_id == args["faculty_id"])
-        if args.get("entity_type"): q = q.filter(models.ActivityLog.entity_type == args["entity_type"])
-        rows = q.order_by(models.ActivityLog.performed_at.desc()).limit(args.get("limit", 20)).all()
-        LOG_KEYS = ["id","entity_type","action","performed_at","performed_by"]
-        return {"count": len(rows), "logs": [_row(r, LOG_KEYS) for r in rows]}
-
-    # ── Student-scoped (own data, read-only) ──────────────────────────────────
+    # ── Student self-service ──────────────────────────────────────────────────
     elif name in {"get_my_profile","get_my_grades","get_my_attendance",
-                  "get_my_financial","get_my_schedule","get_my_enrollments"}:
+                  "get_my_financial","get_my_schedule","get_my_enrollments",
+                  "list_announcements"}:
+        if name == "list_announcements":
+            q = db.query(models.Announcement).filter(models.Announcement.is_active == True)
+            if args.get("faculty_id"): q = q.filter(models.Announcement.faculty_id == args["faculty_id"])
+            rows = q.order_by(models.Announcement.created_at.desc()).limit(20).all()
+            return {"count": len(rows),
+                    "announcements": [_row(a, ["id","title","priority","created_at"]) for a in rows]}
+
         student = db.query(models.Student).filter(models.Student.user_id == user.id).first()
         if not student:
-            return {"error": "لم يتم ربط حسابك بسجل طالب، تواصل مع إدارة الكلية."}
+            return {"error": "لم يتم ربط حسابك بسجل طالب. تواصل مع إدارة الكلية."}
         sid = student.student_id
 
         if name == "get_my_profile":
             return _row(student, STUDENT_KEYS)
+
         elif name == "get_my_grades":
             q = db.query(models.Grade).filter(models.Grade.student_id == sid)
             if args.get("semester"): q = q.filter(models.Grade.semester == args["semester"])
             rows = q.all()
-            return {"count": len(rows), "grades": [_row(g, ["id","course_id","semester","midterm","final_exam","total","grade_letter","grade_points"]) for g in rows]}
+            return {"count": len(rows),
+                    "grades": [_row(g, ["id","course_id","semester","midterm","final_exam",
+                                        "total","grade_letter","grade_points"]) for g in rows]}
+
         elif name == "get_my_attendance":
             q = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.student_id == sid)
             if args.get("course_id"): q = q.filter(models.AttendanceRecord.course_id == args["course_id"])
             rows = q.limit(100).all()
             present = sum(1 for r in rows if r.status == "حاضر")
             return {"total": len(rows), "present": present, "absent": len(rows)-present,
-                    "rate": round(present/len(rows)*100, 1) if rows else 0}
+                    "rate_pct": round(present/len(rows)*100, 1) if rows else 0}
+
         elif name == "get_my_financial":
-            rows = db.query(models.FinancialRecord).filter(models.FinancialRecord.student_id == sid).all()
-            total_due  = sum(float(r.amount or 0) for r in rows)
+            rows = db.query(models.FinancialRecord).filter(
+                models.FinancialRecord.student_id == sid).all()
+            total_due  = sum(float(r.amount or 0)      for r in rows)
             total_paid = sum(float(r.paid_amount or 0) for r in rows)
-            FIN_KEYS = ["id","academic_year","amount","paid_amount","status"]
             return {"count": len(rows), "total_due": total_due, "total_paid": total_paid,
-                    "remaining": round(total_due-total_paid, 2),
-                    "records": [_row(r, FIN_KEYS) for r in rows]}
+                    "remaining": round(total_due - total_paid, 2),
+                    "records": [_row(r, ["id","academic_year","amount","paid_amount","status"])
+                                for r in rows]}
+
         elif name == "get_my_schedule":
             q = db.query(models.CourseSchedule).join(
                 models.Enrollment,
                 (models.Enrollment.course_id == models.CourseSchedule.course_id) &
                 (models.Enrollment.student_id == sid))
             if args.get("semester"): q = q.filter(models.CourseSchedule.semester == args["semester"])
-            SCH_KEYS = ["course_id","day","start_time","end_time","room_id"]
-            return {"schedule": [_row(s, SCH_KEYS) for s in q.all()]}
+            return {"schedule": [_row(s, ["course_id","day","start_time","end_time","room_id"])
+                                 for s in q.all()]}
+
         elif name == "get_my_enrollments":
             q = db.query(models.Enrollment).filter(models.Enrollment.student_id == sid)
             if args.get("semester"): q = q.filter(models.Enrollment.semester == args["semester"])
             rows = q.all()
-            return {"count": len(rows), "enrollments": [_row(e, ["course_id","semester","status"]) for e in rows]}
+            return {"count": len(rows),
+                    "enrollments": [_row(e, ["course_id","semester","status"]) for e in rows]}
 
-    else:
-        return {"error": f"أداة غير معروفة: {name}"}
+    return {"error": f"أداة غير معروفة: {name}"}
 
 
 # ── Endpoint ──────────────────────────────────────────────────────────────────
@@ -668,47 +667,56 @@ async def chat(
 ):
     is_admin = current_user.role in ADMIN_ROLES
     tools    = ADMIN_TOOLS if is_admin else STUDENT_TOOLS
-    system   = ADMIN_SYSTEM if is_admin else STUDENT_SYSTEM
+
+    if is_admin:
+        system = ADMIN_SYSTEM_BASE + _build_admin_context(db)
+    else:
+        system = STUDENT_SYSTEM
 
     messages = [{"role": "system", "content": system}]
     messages += [{"role": m.role, "content": m.content} for m in body.messages]
 
-    # ── Try each provider in order ────────────────────────────────────────────
     last_error = "لا يوجد provider متاح"
     for provider in PROVIDERS:
         if _is_blacklisted(provider["name"]):
-            continue  # rate-limited recently, skip fast
+            continue
 
         client = _get_client(provider)
         if client is None:
             logger.warning("AI: %s — key not set, skipping", provider["name"])
-            continue  # key not configured, skip
+            continue
 
         logger.info("AI: trying %s", provider["name"])
         try:
-            # ── Agentic loop for this provider ────────────────────────────────
             loop_messages = list(messages)
             for iteration in range(10):
                 resp = await client.chat.completions.create(
                     model=provider["model"], messages=loop_messages, tools=tools,
-                    tool_choice="auto", max_tokens=600, temperature=0.3,
+                    tool_choice="auto", max_tokens=700, temperature=0.3,
                 )
                 choice = resp.choices[0]
                 if choice.finish_reason != "tool_calls":
-                    logger.info("AI: %s answered after %d tool call(s)", provider["name"], iteration)
+                    logger.info("AI: %s answered after %d tool call(s)",
+                                provider["name"], iteration)
                     return ChatResponse(response=choice.message.content or "")
 
                 loop_messages.append(choice.message)
                 for tc in choice.message.tool_calls:
-                    logger.info("AI: tool_call=%s args=%s", tc.function.name, tc.function.arguments[:80])
+                    logger.info("AI: tool=%s args=%s",
+                                tc.function.name, tc.function.arguments[:100])
                     try:
-                        result = await run_tool(tc.function.name, json.loads(tc.function.arguments), current_user, db)
+                        result = await run_tool(
+                            tc.function.name,
+                            json.loads(tc.function.arguments),
+                            current_user, db)
                     except Exception as e:
                         result = {"error": str(e)}
-                    loop_messages.append({"role": "tool", "tool_call_id": tc.id,
-                                         "content": json.dumps(result, ensure_ascii=False, default=str)})
+                    loop_messages.append({
+                        "role": "tool", "tool_call_id": tc.id,
+                        "content": json.dumps(result, ensure_ascii=False, default=str)
+                    })
 
-            return ChatResponse(response="عذراً، حدث خطأ. حاول مرة أخرى.")
+            return ChatResponse(response="عذراً، حدث خطأ داخلي. حاول مرة أخرى.")
 
         except Exception as e:
             if _should_skip_provider(e):
@@ -716,10 +724,14 @@ async def chat(
                 logger.warning("AI: skip %s — %s", provider["name"], str(e)[:80])
                 err = str(e).lower()
                 if any(x in err for x in ["429", "rate_limit", "quota"]):
-                    _blacklist_long(provider["name"])   # hard rate limit → 5 min
+                    _blacklist_long(provider["name"])
                 else:
-                    _blacklist(provider["name"])         # timeout/auth → 60 sec
-                continue  # try next provider
-            raise HTTPException(status_code=502, detail=f"خطأ من {provider['name']}: {type(e).__name__}: {e}")
+                    _blacklist(provider["name"])
+                continue
+            raise HTTPException(
+                status_code=502,
+                detail=f"خطأ من {provider['name']}: {type(e).__name__}: {e}")
 
-    raise HTTPException(status_code=503, detail=f"كل الـproviders وصلوا للحد المسموح، حاول بعد قليل. آخر خطأ: {last_error}")
+    raise HTTPException(
+        status_code=503,
+        detail=f"كل الـproviders وصلوا للحد المسموح، حاول بعد قليل. آخر خطأ: {last_error}")
