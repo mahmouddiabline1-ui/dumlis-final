@@ -376,8 +376,14 @@ def import_grades_excel(
                 if total        is not None: existing.total        = float(total)
                 if grade_letter is not None: existing.grade_letter = str(grade_letter)
                 if grade_points is not None: existing.grade_points = float(grade_points)
+                db.flush()
                 updated += 1
             else:
+                student_exists = db.query(models.Student.student_id).filter(
+                    models.Student.student_id == sid
+                ).first()
+                if not student_exists:
+                    errors.append(f"طالب {sid}: غير موجود في النظام"); skipped += 1; continue
                 def _f(v): return float(v) if isinstance(v, (int, float)) else None
                 db.add(models.Grade(
                     student_id=sid, course_id=course_id,
@@ -388,11 +394,17 @@ def import_grades_excel(
                     grade_letter=str(grade_letter) if grade_letter else None,
                     grade_points=_f(grade_points),
                 ))
+                db.flush()
                 created += 1
         except Exception as ex:
+            db.rollback()
             errors.append(f"طالب {sid}: {ex}"); skipped += 1
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"فشل حفظ البيانات: {ex}")
     log_activity(db=db, user_id=user.id, faculty_id=fid,
                  entity_type="grade", entity_id=course_id, action="bulk_import",
                  description=f"Excel import: {course_id}/{semester} created={created} updated={updated} skipped={skipped}")
