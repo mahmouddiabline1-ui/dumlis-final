@@ -62,25 +62,23 @@ function MessageContent({ content, isAdmin }: { content: string; isAdmin: boolea
 }
 
 export default function AiChat({ userRole, authToken }: Props) {
-  const [open, setOpen]       = useState(false);
+  const [open, setOpen]         = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput]     = useState('');
-  const [loading, setLoading] = useState(false);
+  const [input, setInput]       = useState('');
+  const [loading, setLoading]   = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState<{ text: string; ok: boolean } | null>(null);
-  const bottomRef  = useRef<HTMLDivElement>(null);
-  const inputRef   = useRef<HTMLTextAreaElement>(null);
-  const fileRef    = useRef<HTMLInputElement>(null);
+  // pending file state — replaces window._pendingGradeFile
+  const [pendingFile, setPendingFile]   = useState<File | null>(null);
+  const [pendingCourse, setPendingCourse] = useState('');
+  const [pendingSemester, setPendingSemester] = useState('2024-2025 خريف');
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef  = useRef<HTMLTextAreaElement>(null);
+  const fileRef   = useRef<HTMLInputElement>(null);
 
   const isAdmin = userRole && userRole !== 'student';
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
-
-  useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
+  useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
 
   if (!authToken || !userRole) return null;
 
@@ -89,20 +87,17 @@ export default function AiChat({ userRole, authToken }: Props) {
   const send = async () => {
     const text = input.trim();
     if (!text || loading) return;
-
     const userMsg: Message = { role: 'user', content: text };
     const history = [...messages, userMsg];
     setMessages(history);
     setInput('');
     setLoading(true);
-
     try {
       const res = await fetch(`${BASE_URL}/ai/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHdr },
         body: JSON.stringify({ messages: history }),
       });
-
       if (!res.ok) throw new Error(`خطأ ${res.status}`);
       const data = await res.json();
       setMessages([...history, { role: 'assistant', content: data.response }]);
@@ -113,71 +108,49 @@ export default function AiChat({ userRole, authToken }: Props) {
     }
   };
 
-  // ── File upload (grades import via chat) ──────────────────────────────────
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // Ask AI what course/semester to use via a prompt
-    const promptMsg: Message = {
-      role: 'user',
-      content: `تم رفع شيت درجات: "${file.name}"\nلاستيراده يجب تحديد:\n- كود المادة (course_id)\n- الفصل الدراسي (semester)\nمثال: CS101 | 2024-2025 خريف`,
-    };
-    setMessages(prev => [...prev, promptMsg]);
-
-    // Store file for later use after user provides course/semester
-    // Simpler approach: show upload UI inline in chat
-    setUploadMsg({ text: `📎 ملف جاهز: ${file.name} — أرسل: "كود المادة | الفصل" لاستيراده`, ok: true });
-    // Keep file in ref for next send
-    (window as any)._pendingGradeFile = file;
-
+    setPendingFile(file);
+    setPendingCourse('');
     if (fileRef.current) fileRef.current.value = '';
   };
 
-  // Override send to handle pending file upload
-  const sendWithFileCheck = async () => {
-    const pendingFile: File | undefined = (window as any)._pendingGradeFile;
-    if (pendingFile && input.includes('|')) {
-      const parts = input.split('|').map(s => s.trim());
-      const courseId = parts[0];
-      const semester = parts[1];
+  const cancelUpload = () => {
+    setPendingFile(null);
+    setPendingCourse('');
+  };
 
-      if (courseId && semester) {
-        setUploading(true);
-        setUploadMsg(null);
-        const userMsg: Message = { role: 'user', content: `استيراد الشيت: مادة ${courseId} | فصل ${semester}` };
-        const history = [...messages, userMsg];
-        setMessages(history);
-        setInput('');
-
-        try {
-          const fd = new FormData();
-          fd.append('file', pendingFile);
-          const p = new URLSearchParams({ course_id: courseId, semester });
-          const res = await fetch(`${BASE_URL}/grades/import-excel?${p}`, {
-            method: 'POST', headers: authHdr, body: fd,
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.detail || 'فشل الاستيراد');
-          const reply = `✅ تم استيراد شيت الدرجات بنجاح!\n• المادة: ${courseId} | الفصل: ${semester}\n• إضافة جديدة: ${data.created} طالب\n• تحديث: ${data.updated} طالب\n• تجاهل: ${data.skipped}${data.errors?.length ? '\n⚠️ أخطاء: ' + data.errors.slice(0,3).join(' | ') : ''}`;
-          setMessages([...history, { role: 'assistant', content: reply }]);
-          (window as any)._pendingGradeFile = undefined;
-        } catch (ex: any) {
-          setMessages([...messages, { role: 'assistant', content: `❌ فشل الاستيراد: ${ex.message}` }]);
-        } finally {
-          setUploading(false);
-        }
-        return;
-      }
+  const doImport = async () => {
+    if (!pendingFile || !pendingCourse.trim() || !pendingSemester.trim()) return;
+    setUploading(true);
+    const courseId = pendingCourse.trim();
+    const semester = pendingSemester.trim();
+    const userMsg: Message = { role: 'user', content: `📎 استيراد شيت درجات: ${pendingFile.name}\nالمادة: ${courseId} | الفصل: ${semester}` };
+    const history = [...messages, userMsg];
+    setMessages(history);
+    setPendingFile(null);
+    setPendingCourse('');
+    try {
+      const fd = new FormData();
+      fd.append('file', pendingFile);
+      const p = new URLSearchParams({ course_id: courseId, semester });
+      const res = await fetch(`${BASE_URL}/grades/import-excel?${p}`, {
+        method: 'POST', headers: authHdr, body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'فشل الاستيراد');
+      const reply = `✅ تم استيراد الشيت بنجاح!\n• المادة: ${courseId} | الفصل: ${semester}\n• إضافة جديدة: ${data.created} طالب\n• تحديث: ${data.updated} طالب\n• تجاهل: ${data.skipped}${data.errors?.length ? '\n⚠️ أخطاء: ' + data.errors.slice(0, 3).join(' | ') : ''}`;
+      setMessages([...history, { role: 'assistant', content: reply }]);
+    } catch (ex: any) {
+      setMessages([...history, { role: 'assistant', content: `❌ فشل الاستيراد: ${ex.message}` }]);
+    } finally {
+      setUploading(false);
     }
-    await send();
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendWithFileCheck();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
   const label = ROLE_LABELS[userRole] ?? 'المساعد الذكي';
@@ -222,11 +195,36 @@ export default function AiChat({ userRole, authToken }: Props) {
             </button>
           </div>
 
-          {/* Upload notification */}
-          {uploadMsg && (
-            <div className={`px-3 py-2 text-xs font-medium flex items-center justify-between ${uploadMsg.ok ? 'bg-blue-50 text-blue-700 border-b border-blue-200' : 'bg-red-50 text-red-600 border-b border-red-200'}`}>
-              <span>{uploadMsg.text}</span>
-              <button onClick={() => { setUploadMsg(null); (window as any)._pendingGradeFile = undefined; }}><X size={12}/></button>
+          {/* Pending file import form */}
+          {pendingFile && (
+            <div className="px-3 py-3 bg-blue-50 border-b border-blue-200 space-y-2" dir="rtl">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-blue-700 flex items-center gap-1">
+                  📎 {pendingFile.name}
+                </span>
+                <button onClick={cancelUpload} className="text-gray-400 hover:text-red-500"><X size={13}/></button>
+              </div>
+              <input
+                placeholder="كود المادة — مثال: CS101"
+                value={pendingCourse}
+                onChange={e => setPendingCourse(e.target.value)}
+                className="w-full border border-blue-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                dir="ltr"
+              />
+              <input
+                placeholder="الفصل الدراسي — مثال: 2024-2025 خريف"
+                value={pendingSemester}
+                onChange={e => setPendingSemester(e.target.value)}
+                className="w-full border border-blue-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                dir="rtl"
+              />
+              <button
+                onClick={doImport}
+                disabled={uploading || !pendingCourse.trim() || !pendingSemester.trim()}
+                className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+              >
+                {uploading ? <><Loader2 size={12} className="animate-spin"/> جاري الاستيراد...</> : '📥 استيراد الشيت'}
+              </button>
             </div>
           )}
 
@@ -294,14 +292,14 @@ export default function AiChat({ userRole, authToken }: Props) {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={onKey}
-              placeholder={uploadMsg ? 'اكتب: كود المادة | الفصل الدراسي' : hint}
+              placeholder={hint}
               rows={1}
               disabled={loading || uploading}
               className="flex-1 resize-none rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-50 max-h-24"
               style={{ direction: 'rtl' }}
             />
             <button
-              onClick={sendWithFileCheck}
+              onClick={send}
               disabled={!input.trim() || loading || uploading}
               className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-white transition-colors disabled:opacity-40 ${
                 isAdmin ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-700'
