@@ -52,7 +52,7 @@ def _blacklist(name: str, seconds: int = 30) -> None:
     _blacklisted_until[name] = time.time() + seconds
 
 def _blacklist_long(name: str) -> None:
-    _blacklist(name, seconds=120)
+    _blacklist(name, seconds=60)
 
 def _is_blacklisted(name: str) -> bool:
     import time
@@ -767,8 +767,10 @@ async def chat(
     else:
         system = STUDENT_SYSTEM
 
+    # Keep only last 6 messages to avoid token bloat on long conversations
+    recent = body.messages[-6:] if len(body.messages) > 6 else body.messages
     messages = [{"role": "system", "content": system}]
-    messages += [{"role": m.role, "content": m.content} for m in body.messages]
+    messages += [{"role": m.role, "content": m.content} for m in recent]
 
     last_error = "لا يوجد provider متاح"
     for provider in PROVIDERS:
