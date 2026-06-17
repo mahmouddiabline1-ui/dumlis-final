@@ -135,6 +135,205 @@ def _float(v, default=None):
     except (TypeError, ValueError): return default
 
 
+# ── Direct answer layer (no AI needed) ───────────────────────────────────────
+
+def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
+    """
+    Try to answer common questions straight from the DB.
+    Returns Arabic string if matched, None to fall through to AI.
+    """
+    import re
+    q = question.strip()
+
+    # ── helpers ───────────────────────────────────────────────────────────────
+    def _student_card(s) -> str:
+        return (
+            f"**{s.name}** (كود: {s.student_id})\n"
+            f"• الكلية: {s.faculty_id} | القسم: {s.department_id or '—'} | المستوى: {s.level}\n"
+            f"• الحالة: {s.status} | الرسوم: {s.fees_status} | المعدل: {s.gpa or '—'}\n"
+            f"• الهاتف: {s.phone or '—'} | البريد: {s.email or '—'}"
+        )
+
+    def _id_in(text: str):
+        m = re.search(r'\b(\d{6,8})\b', text)
+        return m.group(1) if m else None
+
+    def _level_in(text: str):
+        m = re.search(r'(?:المستوى|السنة|العام)\s*(?:ال)?(\w+)', text)
+        words = {"اول":1,"أول":1,"ثاني":2,"ثالث":3,"رابع":4,
+                 "خامس":5,"سادس":6,"سابع":7,
+                 "1":1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7}
+        return words.get(m.group(1)) if m else None
+
+    is_admin = user.role in ADMIN_ROLES
+
+    # ── 1. إحصائيات عامة ─────────────────────────────────────────────────────
+    if re.search(r'(إحصائيات|احصائيات|نظرة عامة|ملخص النظام|overview)', q, re.I):
+        total   = db.query(models.Student).count()
+        active  = db.query(models.Student).filter(models.Student.status == "مقيد").count()
+        susp    = db.query(models.Student).filter(models.Student.status == "موقوف").count()
+        exp     = db.query(models.Student).filter(models.Student.status == "مفصول").count()
+        unpaid  = db.query(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
+        paid    = db.query(models.Student).filter(models.Student.fees_status == "مسدد").count()
+        facs    = db.query(models.Faculty).count()
+        lines = [
+            f"📊 **إحصائيات النظام**",
+            f"• إجمالي الطلاب: **{total}**",
+            f"  - مقيد: {active} | موقوف: {susp} | مفصول: {exp}",
+            f"• الرسوم: مسدد {paid} | غير مسدد {unpaid}",
+            f"  - نسبة السداد: {round(paid/total*100,1) if total else 0}%",
+            f"• عدد الكليات: {facs}",
+        ]
+        lvl_parts = []
+        for lvl in range(1, 8):
+            c = db.query(models.Student).filter(models.Student.level == lvl).count()
+            if c: lvl_parts.append(f"سنة{lvl}: {c}")
+        if lvl_parts:
+            lines.append("• توزيع المستويات: " + " | ".join(lvl_parts))
+        return "\n".join(lines)
+
+    # ── 2. عدد الطلاب الإجمالي ───────────────────────────────────────────────
+    if re.search(r'(كم|عدد).{0,15}(طلاب|الطلاب)\b(?!.*(المقيد|الموقوف|المفصول|المستوى|الرسوم|مادة))', q):
+        if not re.search(r'(المقيد|الموقوف|المفصول|المستوى|الرسوم|لم يسدد|غير مسدد)', q):
+            total  = db.query(models.Student).count()
+            active = db.query(models.Student).filter(models.Student.status == "مقيد").count()
+            return f"إجمالي الطلاب في النظام: **{total}** طالب\n• منهم مقيدون: {active}"
+
+    # ── 3. عدد المقيدين ──────────────────────────────────────────────────────
+    if re.search(r'(كم|عدد).{0,20}(مقيد|المقيدين)', q):
+        c = db.query(models.Student).filter(models.Student.status == "مقيد").count()
+        return f"عدد الطلاب المقيدين: **{c}** طالب"
+
+    # ── 4. عدد الموقوفين ─────────────────────────────────────────────────────
+    if re.search(r'(كم|عدد).{0,20}(موقوف|الموقوفين)', q):
+        c = db.query(models.Student).filter(models.Student.status == "موقوف").count()
+        return f"عدد الطلاب الموقوفين: **{c}** طالب"
+
+    # ── 5. عدد المفصولين ─────────────────────────────────────────────────────
+    if re.search(r'(كم|عدد).{0,20}(مفصول|المفصولين)', q):
+        c = db.query(models.Student).filter(models.Student.status == "مفصول").count()
+        return f"عدد الطلاب المفصولين: **{c}** طالب"
+
+    # ── 6. طلاب مستوى معين ───────────────────────────────────────────────────
+    lvl = _level_in(q)
+    if lvl and re.search(r'(طلاب|عدد|اعرض|قائمة)', q):
+        c = db.query(models.Student).filter(models.Student.level == lvl).count()
+        rows = db.query(models.Student).filter(models.Student.level == lvl).limit(8).all()
+        names = "\n".join(f"  • {s.name} ({s.student_id})" for s in rows)
+        more  = f"\n  ... و{c - len(rows)} آخرين" if c > len(rows) else ""
+        return f"طلاب المستوى {lvl}: **{c}** طالب\n{names}{more}"
+
+    # ── 7. بيانات طالب بكوده ─────────────────────────────────────────────────
+    sid = _id_in(q)
+    if sid and re.search(r'(بيانات|معلومات|اعرض|من هو|الطالب|من)', q):
+        s = db.get(models.Student, sid)
+        if s:
+            grades = db.query(models.Grade).filter(models.Grade.student_id == sid).limit(10).all()
+            grade_lines = ""
+            if grades:
+                grade_lines = "\n📚 **آخر الدرجات:**\n" + "\n".join(
+                    f"  • {g.course_id} | {g.semester}: {g.total or '—'} ({g.grade_letter or '—'})"
+                    for g in grades[-5:])
+            fin = db.query(models.FinancialRecord).filter(
+                models.FinancialRecord.student_id == sid).all()
+            fin_line = ""
+            if fin:
+                due  = sum(float(r.amount or 0) for r in fin)
+                paid = sum(float(r.paid_amount or 0) for r in fin)
+                fin_line = f"\n💰 **المالية:** مطلوب {due:.0f} ج.م | مسدد {paid:.0f} ج.م | متبقي {due-paid:.0f} ج.م"
+            return _student_card(s) + grade_lines + fin_line
+        return f"لا يوجد طالب بكود **{sid}** في النظام."
+
+    # ── 8. درجات طالب بكوده ──────────────────────────────────────────────────
+    if sid and re.search(r'(درجات|نتيجة|نتائج|تقدير|معدل)', q):
+        s = db.get(models.Student, sid)
+        if s:
+            grades = db.query(models.Grade).filter(models.Grade.student_id == sid).all()
+            if not grades:
+                return f"لا توجد درجات مسجّلة للطالب **{s.name}** ({sid}) حتى الآن."
+            lines = [f"📚 **درجات الطالب {s.name} ({sid}):**"]
+            for g in grades:
+                lines.append(f"• {g.course_id} | {g.semester}: مجموع={g.total or '—'} | تقدير={g.grade_letter or '—'}")
+            gpa = s.gpa
+            if gpa: lines.append(f"\n📈 **المعدل التراكمي: {gpa}**")
+            return "\n".join(lines)
+        return f"لا يوجد طالب بكود **{sid}**."
+
+    # ── 9. معدل/GPA طالب بكوده ───────────────────────────────────────────────
+    if sid and re.search(r'(معدل|gpa|المعدل)', q, re.I):
+        s = db.get(models.Student, sid)
+        if s:
+            return f"المعدل التراكمي للطالب **{s.name}**: {s.gpa or 'غير مسجّل'}"
+        return f"لا يوجد طالب بكود {sid}."
+
+    # ── 10. البحث بالاسم ─────────────────────────────────────────────────────
+    m = re.search(r'(ابحث|بحث|اعرض|عرض).{0,10}(?:اسمه|اسمها|يسمى|تسمى|طالب)\s+(.{2,20})', q)
+    if m:
+        name_q = m.group(2).strip()
+        rows = db.query(models.Student).filter(
+            models.Student.name.ilike(f"%{name_q}%")).limit(10).all()
+        if not rows:
+            return f"لا يوجد طالب باسم «{name_q}» في النظام."
+        if len(rows) == 1:
+            return _student_card(rows[0])
+        lines = [f"وُجد **{len(rows)}** طلاب باسم «{name_q}»:"]
+        for s in rows:
+            lines.append(f"• {s.name} ({s.student_id}) — {s.faculty_id} — سنة {s.level}")
+        return "\n".join(lines)
+
+    # ── 11. السجل المالي لطالب ────────────────────────────────────────────────
+    if sid and re.search(r'(مالي|رسوم|الرسوم|سدد|يسدد|المالية)', q):
+        s = db.get(models.Student, sid)
+        if s:
+            fin = db.query(models.FinancialRecord).filter(
+                models.FinancialRecord.student_id == sid).all()
+            if not fin:
+                return f"لا توجد سجلات مالية للطالب **{s.name}** ({sid})."
+            due  = sum(float(r.amount or 0) for r in fin)
+            paid = sum(float(r.paid_amount or 0) for r in fin)
+            lines = [f"💰 **المالية للطالب {s.name} ({sid}):**"]
+            for r in fin:
+                lines.append(f"• {r.academic_year or '—'}: مطلوب {r.amount or 0} | مسدد {r.paid_amount or 0} | {r.status or '—'}")
+            lines.append(f"\n**الإجمالي:** مطلوب {due:.0f} ج.م | مسدد {paid:.0f} ج.م | متبقي {due-paid:.0f} ج.م")
+            return "\n".join(lines)
+
+    # ── 12. نسبة السداد / التحصيل المالي ────────────────────────────────────
+    if re.search(r'(نسبة السداد|نسبة التحصيل|التحصيل المالي|الرسوم المحصّلة|المحصلة|لم يسدد|غير مسدد)', q):
+        total  = db.query(models.Student).count()
+        paid   = db.query(models.Student).filter(models.Student.fees_status == "مسدد").count()
+        unpaid = db.query(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
+        pct    = round(paid / total * 100, 1) if total else 0
+        from sqlalchemy import func
+        total_rev = db.query(func.sum(models.FinancialRecord.paid_amount)).scalar() or 0
+        return (
+            f"💰 **التحصيل المالي:**\n"
+            f"• مسدد: {paid} طالب | غير مسدد: {unpaid} طالب\n"
+            f"• نسبة السداد: **{pct}%**\n"
+            f"• إجمالي المحصّل: {float(total_rev):,.0f} ج.م"
+        )
+
+    # ── 13. عدد الكليات ──────────────────────────────────────────────────────
+    if re.search(r'(كم|عدد).{0,15}(كليات|الكليات)', q):
+        rows = db.query(models.Faculty).all()
+        names = " | ".join(f.id for f in rows)
+        return f"عدد الكليات في النظام: **{len(rows)}**\n• {names}"
+
+    # ── 14. قائمة الطلاب (بدون فلتر) ───────────────────────────────────────
+    if re.search(r'^(اعرض|عرض|قائمة)\s+(الطلاب|طلاب)$', q.strip()):
+        rows = db.query(models.Student).limit(10).all()
+        total = db.query(models.Student).count()
+        lines = [f"📋 **قائمة الطلاب** (عرض أول 10 من {total}):"]
+        for s in rows:
+            lines.append(f"• {s.name} ({s.student_id}) — {s.faculty_id} — سنة {s.level} — {s.status}")
+        return "\n".join(lines)
+
+    # ── 15. أسئلة خارج النطاق ────────────────────────────────────────────────
+    if re.search(r'(الطقس|نكتة|اضحكني|كرة|اخبار|اخبر|أخبار)', q):
+        return "أنا مساعد جامعي مخصص لنظام DUMLIS، لا أستطيع الإجابة على أسئلة خارج النطاق الجامعي 😊"
+
+    return None  # لم يتطابق أي pattern → انتقل للـ AI
+
+
 # ── Live context builder ──────────────────────────────────────────────────────
 
 def _build_admin_context(db: Session) -> str:
@@ -760,7 +959,17 @@ async def chat(
     db: Session = Depends(get_db),
 ):
     is_admin = current_user.role in ADMIN_ROLES
-    tools    = ADMIN_TOOLS if is_admin else STUDENT_TOOLS
+
+    # ── Direct answer layer — no AI needed ───────────────────────────────────
+    if body.messages:
+        last_q = body.messages[-1].content
+        direct = _try_direct(last_q, db, current_user)
+        if direct is not None:
+            logger.info("AI: direct answer for: %s", last_q[:60])
+            return ChatResponse(response=direct)
+
+    # ── Fall through to AI only when direct layer has no answer ──────────────
+    tools  = ADMIN_TOOLS if is_admin else STUDENT_TOOLS
 
     if is_admin:
         system = ADMIN_SYSTEM_BASE + _build_admin_context(db)
