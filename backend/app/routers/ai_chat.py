@@ -139,10 +139,10 @@ def _float(v, default=None):
 
 def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
     """
-    Try to answer common questions straight from the DB.
-    Returns Arabic string if matched, None to fall through to AI.
+    Answer common questions straight from DB. Returns Arabic string or None → AI.
     """
     import re
+    from sqlalchemy import func
     q = question.strip()
 
     # ── helpers ───────────────────────────────────────────────────────────────
@@ -160,29 +160,52 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
 
     def _level_in(text: str):
         m = re.search(r'(?:المستوى|السنة|العام)\s*(?:ال)?(\w+)', text)
-        words = {"اول":1,"أول":1,"ثاني":2,"ثالث":3,"رابع":4,
-                 "خامس":5,"سادس":6,"سابع":7,
-                 "1":1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7}
-        return words.get(m.group(1)) if m else None
+        if not m: return None
+        w = m.group(1).rstrip('ة')  # strip taa marbuta: رابعة→رابع
+        words = {
+            "اول":1,"أول":1,"اولى":1,"أولى":1,
+            "ثاني":2,"ثانية":2,"ثانيه":2,
+            "ثالث":3,"ثالثة":3,
+            "رابع":4,"رابعة":4,
+            "خامس":5,"خامسة":5,
+            "سادس":6,"سادسة":6,
+            "سابع":7,"سابعة":7,
+            "1":1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7,
+        }
+        return words.get(w) or words.get(m.group(1))
 
-    is_admin = user.role in ADMIN_ROLES
+    def _payment_stats():
+        total  = db.query(models.Student).count()
+        paid_c = db.query(models.Student).filter(models.Student.fees_status == "مسدد").count()
+        unpaid = db.query(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
+        pct    = round(paid_c / total * 100, 1) if total else 0
+        rev    = float(db.query(func.sum(models.FinancialRecord.paid_amount)).scalar() or 0)
+        return (
+            f"💰 **التحصيل المالي:**\n"
+            f"• مسدد: {paid_c} طالب | غير مسدد: {unpaid} طالب\n"
+            f"• نسبة السداد: **{pct}%**\n"
+            f"• إجمالي المحصّل: {rev:,.0f} ج.م"
+        )
 
     # ── 1. إحصائيات عامة ─────────────────────────────────────────────────────
-    if re.search(r'(إحصائيات|احصائيات|نظرة عامة|ملخص النظام|overview)', q, re.I):
-        total   = db.query(models.Student).count()
-        active  = db.query(models.Student).filter(models.Student.status == "مقيد").count()
-        susp    = db.query(models.Student).filter(models.Student.status == "موقوف").count()
-        exp     = db.query(models.Student).filter(models.Student.status == "مفصول").count()
-        unpaid  = db.query(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
-        paid    = db.query(models.Student).filter(models.Student.fees_status == "مسدد").count()
-        facs    = db.query(models.Faculty).count()
-        lines = [
-            f"📊 **إحصائيات النظام**",
+    if re.search(r'(إحصائيات|احصائيات|نظرة عامة|ملخص|overview|dashboard|لوحة)', q, re.I):
+        total  = db.query(models.Student).count()
+        active = db.query(models.Student).filter(models.Student.status == "مقيد").count()
+        susp   = db.query(models.Student).filter(models.Student.status == "موقوف").count()
+        exp    = db.query(models.Student).filter(models.Student.status == "مفصول").count()
+        grad   = db.query(models.Student).filter(models.Student.status == "خريج").count()
+        paid_c = db.query(models.Student).filter(models.Student.fees_status == "مسدد").count()
+        unpaid = db.query(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
+        facs   = db.query(models.Faculty).count()
+        ann    = db.query(models.Announcement).filter(models.Announcement.is_active == True).count()
+        rev    = float(db.query(func.sum(models.FinancialRecord.paid_amount)).scalar() or 0)
+        lines  = [
+            "📊 **إحصائيات النظام**",
             f"• إجمالي الطلاب: **{total}**",
-            f"  - مقيد: {active} | موقوف: {susp} | مفصول: {exp}",
-            f"• الرسوم: مسدد {paid} | غير مسدد {unpaid}",
-            f"  - نسبة السداد: {round(paid/total*100,1) if total else 0}%",
-            f"• عدد الكليات: {facs}",
+            f"  - مقيد: {active} | موقوف: {susp} | مفصول: {exp} | خريج: {grad}",
+            f"• الرسوم: مسدد {paid_c} | غير مسدد {unpaid} — نسبة السداد: {round(paid_c/total*100,1) if total else 0}%",
+            f"• إجمالي المحصّل: {rev:,.0f} ج.م",
+            f"• عدد الكليات: {facs} | إعلانات نشطة: {ann}",
         ]
         lvl_parts = []
         for lvl in range(1, 8):
@@ -193,83 +216,137 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
         return "\n".join(lines)
 
     # ── 2. عدد الطلاب الإجمالي ───────────────────────────────────────────────
-    if re.search(r'(كم|عدد).{0,15}(طلاب|الطلاب)\b(?!.*(المقيد|الموقوف|المفصول|المستوى|الرسوم|مادة))', q):
-        if not re.search(r'(المقيد|الموقوف|المفصول|المستوى|الرسوم|لم يسدد|غير مسدد)', q):
-            total  = db.query(models.Student).count()
-            active = db.query(models.Student).filter(models.Student.status == "مقيد").count()
-            return f"إجمالي الطلاب في النظام: **{total}** طالب\n• منهم مقيدون: {active}"
+    if re.search(r'(كم عدد الطلاب|كم طالب|عدد الطلاب الكلي|اجمالي الطلاب|إجمالي الطلاب)', q):
+        total  = db.query(models.Student).count()
+        active = db.query(models.Student).filter(models.Student.status == "مقيد").count()
+        return f"إجمالي الطلاب: **{total}** | منهم مقيدون: {active}"
 
-    # ── 3. عدد المقيدين ──────────────────────────────────────────────────────
-    if re.search(r'(كم|عدد).{0,20}(مقيد|المقيدين)', q):
-        c = db.query(models.Student).filter(models.Student.status == "مقيد").count()
-        return f"عدد الطلاب المقيدين: **{c}** طالب"
+    # ── 3. حالات الطلاب ──────────────────────────────────────────────────────
+    for kw, status, label in [
+        (r'مقيد|المقيدين|مقيدين',     "مقيد",   "المقيدين"),
+        (r'موقوف|الموقوفين|موقوفين',   "موقوف",  "الموقوفين"),
+        (r'مفصول|المفصولين|مفصولين',   "مفصول",  "المفصولين"),
+        (r'خريج|الخريجين|خريجين',      "خريج",   "الخريجين"),
+        (r'منتظم|المنتظمين',           "منتظم",  "المنتظمين"),
+    ]:
+        if re.search(rf'(كم|عدد).{{0,20}}({kw})', q):
+            c = db.query(models.Student).filter(models.Student.status == status).count()
+            return f"عدد الطلاب {label}: **{c}** طالب"
 
-    # ── 4. عدد الموقوفين ─────────────────────────────────────────────────────
-    if re.search(r'(كم|عدد).{0,20}(موقوف|الموقوفين)', q):
-        c = db.query(models.Student).filter(models.Student.status == "موقوف").count()
-        return f"عدد الطلاب الموقوفين: **{c}** طالب"
+    # ── 4. طلاب لم يسددوا / غير مسددين ──────────────────────────────────────
+    if re.search(r'(لم يسدد|غير مسدد|متاخر|متأخر).{0,20}(رسوم|الرسوم|دفع)', q) or \
+       re.search(r'(رسوم|الرسوم).{0,20}(لم يسدد|غير مسدد)', q):
+        c = db.query(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
+        rows = db.query(models.Student).filter(
+            models.Student.fees_status == "غير مسدد").limit(8).all()
+        lines = [f"⚠️ الطلاب غير المسددين للرسوم: **{c}** طالب"]
+        for s in rows:
+            lines.append(f"• {s.name} ({s.student_id}) — {s.faculty_id}")
+        if c > len(rows): lines.append(f"  ... و{c-len(rows)} آخرين")
+        return "\n".join(lines)
 
-    # ── 5. عدد المفصولين ─────────────────────────────────────────────────────
-    if re.search(r'(كم|عدد).{0,20}(مفصول|المفصولين)', q):
-        c = db.query(models.Student).filter(models.Student.status == "مفصول").count()
-        return f"عدد الطلاب المفصولين: **{c}** طالب"
-
-    # ── 6. طلاب مستوى معين ───────────────────────────────────────────────────
+    # ── 5. طلاب مستوى معين ───────────────────────────────────────────────────
     lvl = _level_in(q)
-    if lvl and re.search(r'(طلاب|عدد|اعرض|قائمة)', q):
-        c = db.query(models.Student).filter(models.Student.level == lvl).count()
-        rows = db.query(models.Student).filter(models.Student.level == lvl).limit(8).all()
-        names = "\n".join(f"  • {s.name} ({s.student_id})" for s in rows)
-        more  = f"\n  ... و{c - len(rows)} آخرين" if c > len(rows) else ""
+    if lvl and re.search(r'(طلاب|عدد|اعرض|قائمة|كم)', q):
+        c    = db.query(models.Student).filter(models.Student.level == lvl).count()
+        rows = db.query(models.Student).filter(models.Student.level == lvl).limit(10).all()
+        names = "\n".join(f"  • {s.name} ({s.student_id}) — {s.status}" for s in rows)
+        more  = f"\n  ... و{c-len(rows)} آخرين" if c > len(rows) else ""
         return f"طلاب المستوى {lvl}: **{c}** طالب\n{names}{more}"
 
-    # ── 7. بيانات طالب بكوده ─────────────────────────────────────────────────
+    # ── 6. بيانات طالب بكوده (شاملة) ────────────────────────────────────────
     sid = _id_in(q)
-    if sid and re.search(r'(بيانات|معلومات|اعرض|من هو|الطالب|من)', q):
+    if sid and re.search(r'(بيانات|معلومات|اعرض|عرض|من هو|الطالب|ملف|بروفايل)', q):
         s = db.get(models.Student, sid)
-        if s:
-            grades = db.query(models.Grade).filter(models.Grade.student_id == sid).limit(10).all()
-            grade_lines = ""
-            if grades:
-                grade_lines = "\n📚 **آخر الدرجات:**\n" + "\n".join(
-                    f"  • {g.course_id} | {g.semester}: {g.total or '—'} ({g.grade_letter or '—'})"
-                    for g in grades[-5:])
-            fin = db.query(models.FinancialRecord).filter(
-                models.FinancialRecord.student_id == sid).all()
-            fin_line = ""
-            if fin:
-                due  = sum(float(r.amount or 0) for r in fin)
-                paid = sum(float(r.paid_amount or 0) for r in fin)
-                fin_line = f"\n💰 **المالية:** مطلوب {due:.0f} ج.م | مسدد {paid:.0f} ج.م | متبقي {due-paid:.0f} ج.م"
-            return _student_card(s) + grade_lines + fin_line
-        return f"لا يوجد طالب بكود **{sid}** في النظام."
+        if not s: return f"لا يوجد طالب بكود **{sid}** في النظام."
+        grades = db.query(models.Grade).filter(models.Grade.student_id == sid).limit(10).all()
+        grade_lines = ""
+        if grades:
+            grade_lines = "\n📚 **آخر الدرجات:**\n" + "\n".join(
+                f"  • {g.course_id} | {g.semester}: {g.total or '—'} ({g.grade_letter or '—'})"
+                for g in grades[-5:])
+        fin = db.query(models.FinancialRecord).filter(
+            models.FinancialRecord.student_id == sid).all()
+        fin_line = ""
+        if fin:
+            due  = sum(float(r.amount or 0) for r in fin)
+            paid = sum(float(r.paid_amount or 0) for r in fin)
+            fin_line = f"\n💰 **المالية:** مطلوب {due:.0f} | مسدد {paid:.0f} | متبقي {due-paid:.0f} ج.م"
+        att = db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.student_id == sid).limit(100).all()
+        att_line = ""
+        if att:
+            present = sum(1 for r in att if r.status == "حاضر")
+            att_line = f"\n📅 **الحضور:** {present}/{len(att)} ({round(present/len(att)*100,1)}%)"
+        return _student_card(s) + grade_lines + fin_line + att_line
 
-    # ── 8. درجات طالب بكوده ──────────────────────────────────────────────────
-    if sid and re.search(r'(درجات|نتيجة|نتائج|تقدير|معدل)', q):
+    # ── 7. درجات طالب بكوده ──────────────────────────────────────────────────
+    if sid and re.search(r'(درجات|نتيجة|نتائج|تقدير|مادة|مواد)', q):
         s = db.get(models.Student, sid)
-        if s:
-            grades = db.query(models.Grade).filter(models.Grade.student_id == sid).all()
-            if not grades:
-                return f"لا توجد درجات مسجّلة للطالب **{s.name}** ({sid}) حتى الآن."
-            lines = [f"📚 **درجات الطالب {s.name} ({sid}):**"]
-            for g in grades:
-                lines.append(f"• {g.course_id} | {g.semester}: مجموع={g.total or '—'} | تقدير={g.grade_letter or '—'}")
-            gpa = s.gpa
-            if gpa: lines.append(f"\n📈 **المعدل التراكمي: {gpa}**")
-            return "\n".join(lines)
-        return f"لا يوجد طالب بكود **{sid}**."
+        if not s: return f"لا يوجد طالب بكود **{sid}**."
+        grades = db.query(models.Grade).filter(models.Grade.student_id == sid).all()
+        if not grades:
+            return f"لا توجد درجات مسجّلة للطالب **{s.name}** ({sid}) حتى الآن."
+        lines = [f"📚 **درجات {s.name} ({sid}):**"]
+        for g in grades:
+            parts = []
+            if g.assignments is not None: parts.append(f"أعمال: {g.assignments:.0f}")
+            if g.midterm     is not None: parts.append(f"ميد: {g.midterm:.0f}")
+            if g.final_exam  is not None: parts.append(f"نهائي: {g.final_exam:.0f}")
+            detail = " | ".join(parts)
+            lines.append(f"• {g.course_id} ({g.semester}): مجموع={g.total or '—'} تقدير={g.grade_letter or '—'}"
+                         + (f" [{detail}]" if detail else ""))
+        if s.gpa: lines.append(f"\n📈 **المعدل التراكمي: {s.gpa}**")
+        return "\n".join(lines)
 
-    # ── 9. معدل/GPA طالب بكوده ───────────────────────────────────────────────
-    if sid and re.search(r'(معدل|gpa|المعدل)', q, re.I):
+    # ── 8. معدل GPA بكوده ────────────────────────────────────────────────────
+    if sid and re.search(r'(معدل|gpa|المعدل التراكمي)', q, re.I):
         s = db.get(models.Student, sid)
-        if s:
-            return f"المعدل التراكمي للطالب **{s.name}**: {s.gpa or 'غير مسجّل'}"
-        return f"لا يوجد طالب بكود {sid}."
+        if not s: return f"لا يوجد طالب بكود {sid}."
+        return f"📈 المعدل التراكمي للطالب **{s.name}** ({sid}): **{s.gpa or 'غير مسجّل'}**"
 
-    # ── 10. البحث بالاسم ─────────────────────────────────────────────────────
-    m = re.search(r'(ابحث|بحث|اعرض|عرض).{0,10}(?:اسمه|اسمها|يسمى|تسمى|طالب)\s+(.{2,20})', q)
-    if m:
-        name_q = m.group(2).strip()
+    # ── 9. حضور طالب بكوده ───────────────────────────────────────────────────
+    if sid and re.search(r'(حضور|غياب|نسبة الحضور|سجل الحضور)', q):
+        s = db.get(models.Student, sid)
+        if not s: return f"لا يوجد طالب بكود {sid}."
+        rows = db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.student_id == sid).limit(200).all()
+        if not rows:
+            return f"لا توجد سجلات حضور للطالب **{s.name}** ({sid})."
+        present = sum(1 for r in rows if r.status == "حاضر")
+        absent  = len(rows) - present
+        pct     = round(present / len(rows) * 100, 1)
+        warn    = " ⚠️ نسبة الحضور أقل من 75%" if pct < 75 else ""
+        return (
+            f"📅 **حضور الطالب {s.name} ({sid}):**\n"
+            f"• حاضر: {present} | غائب: {absent} | الإجمالي: {len(rows)}\n"
+            f"• نسبة الحضور: **{pct}%**{warn}"
+        )
+
+    # ── 10. السجل المالي لطالب ───────────────────────────────────────────────
+    if sid and re.search(r'(مالي|رسوم|الرسوم|سدد|يسدد|المالية|دفع)', q):
+        s = db.get(models.Student, sid)
+        if not s: return f"لا يوجد طالب بكود {sid}."
+        fin = db.query(models.FinancialRecord).filter(
+            models.FinancialRecord.student_id == sid).all()
+        if not fin:
+            return f"لا توجد سجلات مالية للطالب **{s.name}** ({sid})."
+        due  = sum(float(r.amount or 0) for r in fin)
+        paid = sum(float(r.paid_amount or 0) for r in fin)
+        lines = [f"💰 **المالية للطالب {s.name} ({sid}):**"]
+        for r in fin:
+            lines.append(f"• {r.academic_year or '—'}: مطلوب {r.amount or 0} | مسدد {r.paid_amount or 0} | {r.status or '—'}")
+        lines.append(f"\n**الإجمالي:** مطلوب {due:.0f} | مسدد {paid:.0f} | متبقي {due-paid:.0f} ج.م")
+        return "\n".join(lines)
+
+    # ── 11. بحث بالاسم ───────────────────────────────────────────────────────
+    m_name = re.search(
+        r'(?:ابحث|بحث|اعرض|عرض|جيب|هات|وين|فين).{0,15}(?:اسمه|اسمها|يسمى|تسمى|اسمه?|طالب(?:ة)?)\s+([^\d؟?،,]{2,25})',
+        q)
+    if not m_name:
+        m_name = re.search(r'(?:طالب|طالبة)\s+(?:اسمه|اسمها|يسمى|تسمى)?\s*([^\d؟?،,]{2,25})$', q)
+    if m_name:
+        name_q = m_name.group(1).strip().rstrip('؟?')
         rows = db.query(models.Student).filter(
             models.Student.name.ilike(f"%{name_q}%")).limit(10).all()
         if not rows:
@@ -278,58 +355,173 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
             return _student_card(rows[0])
         lines = [f"وُجد **{len(rows)}** طلاب باسم «{name_q}»:"]
         for s in rows:
-            lines.append(f"• {s.name} ({s.student_id}) — {s.faculty_id} — سنة {s.level}")
+            lines.append(f"• {s.name} ({s.student_id}) — {s.faculty_id} — سنة {s.level} — {s.status}")
         return "\n".join(lines)
 
-    # ── 11. السجل المالي لطالب ────────────────────────────────────────────────
-    if sid and re.search(r'(مالي|رسوم|الرسوم|سدد|يسدد|المالية)', q):
-        s = db.get(models.Student, sid)
-        if s:
-            fin = db.query(models.FinancialRecord).filter(
-                models.FinancialRecord.student_id == sid).all()
-            if not fin:
-                return f"لا توجد سجلات مالية للطالب **{s.name}** ({sid})."
-            due  = sum(float(r.amount or 0) for r in fin)
-            paid = sum(float(r.paid_amount or 0) for r in fin)
-            lines = [f"💰 **المالية للطالب {s.name} ({sid}):**"]
-            for r in fin:
-                lines.append(f"• {r.academic_year or '—'}: مطلوب {r.amount or 0} | مسدد {r.paid_amount or 0} | {r.status or '—'}")
-            lines.append(f"\n**الإجمالي:** مطلوب {due:.0f} ج.م | مسدد {paid:.0f} ج.م | متبقي {due-paid:.0f} ج.م")
-            return "\n".join(lines)
-
     # ── 12. نسبة السداد / التحصيل المالي ────────────────────────────────────
-    if re.search(r'(نسبة السداد|نسبة التحصيل|التحصيل المالي|الرسوم المحصّلة|المحصلة|لم يسدد|غير مسدد)', q):
-        total  = db.query(models.Student).count()
-        paid   = db.query(models.Student).filter(models.Student.fees_status == "مسدد").count()
-        unpaid = db.query(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
-        pct    = round(paid / total * 100, 1) if total else 0
-        from sqlalchemy import func
-        total_rev = db.query(func.sum(models.FinancialRecord.paid_amount)).scalar() or 0
+    if re.search(r'(نسبة.{0,5}سداد|سداد.{0,10}رسوم|تحصيل مالي|التحصيل المالي|'
+                 r'رسوم.{0,10}محصّل|المحصّلة|لم يسدد|غير مسدد|نسبة.{0,5}تحصيل)', q):
+        return _payment_stats()
+
+    # ── 13. إجمالي الإيرادات ─────────────────────────────────────────────────
+    if re.search(r'(إجمالي الرسوم|اجمالي الرسوم|مجموع الرسوم|الإيرادات|الايرادات|المحصّل)', q):
+        return _payment_stats()
+
+    # ── 14. الكليات ──────────────────────────────────────────────────────────
+    if re.search(r'(كم|عدد|اعرض|قائمة).{0,15}(كليات|الكليات)', q):
+        rows = db.query(models.Faculty).all()
+        lines = [f"🏛️ الكليات في النظام: **{len(rows)}**"]
+        for f in rows:
+            lines.append(f"• {f.id}: {f.name if hasattr(f,'name') else ''}")
+        return "\n".join(lines)
+
+    # ── 15. الأقسام ──────────────────────────────────────────────────────────
+    if re.search(r'(اقسام|أقسام|الأقسام|التخصصات)', q):
+        fac_m = re.search(r'(كلية|كل).{0,10}(\w+)', q)
+        dq = db.query(models.Department)
+        rows = dq.limit(30).all()
+        lines = [f"📂 **الأقسام** ({len(rows)} قسم):"]
+        for d in rows:
+            lines.append(f"• {d.name} ({d.id}) — {d.faculty_id}")
+        return "\n".join(lines)
+
+    # ── 16. المقررات الدراسية ────────────────────────────────────────────────
+    if re.search(r'(مقررات|المقررات|كورسات|المواد الدراسية|الكتالوج|catalog)', q, re.I):
+        rows = db.query(models.Course).limit(40).all()
+        lines = [f"📖 **المقررات الدراسية** ({len(rows)} مادة):"]
+        for c in rows:
+            lines.append(f"• {c.id}: {c.name} — سنة {c.level} — {c.credit_hours or '—'} ساعة")
+        return "\n".join(lines)
+
+    # ── 17. الإعلانات ────────────────────────────────────────────────────────
+    if re.search(r'(إعلانات|اعلانات|الإعلانات|إعلان|اعلان)', q):
+        rows = db.query(models.Announcement).filter(
+            models.Announcement.is_active == True
+        ).order_by(models.Announcement.created_at.desc()).limit(10).all()
+        if not rows:
+            return "لا توجد إعلانات نشطة حالياً."
+        lines = [f"📢 **الإعلانات النشطة** ({len(rows)}):"]
+        for a in rows:
+            lines.append(f"• [{a.priority or 'عادي'}] {a.title}")
+        return "\n".join(lines)
+
+    # ── 18. طلبات التسجيل ────────────────────────────────────────────────────
+    if re.search(r'(طلبات التسجيل|طلبات معلّقة|الطلبات المعلقة|requests|طلب تسجيل)', q, re.I):
+        pending = db.query(models.RegistrationRequest).filter(
+            models.RegistrationRequest.status == "قيد المراجعة").count()
+        total_r = db.query(models.RegistrationRequest).count()
         return (
-            f"💰 **التحصيل المالي:**\n"
-            f"• مسدد: {paid} طالب | غير مسدد: {unpaid} طالب\n"
-            f"• نسبة السداد: **{pct}%**\n"
-            f"• إجمالي المحصّل: {float(total_rev):,.0f} ج.م"
+            f"📋 **طلبات التسجيل:**\n"
+            f"• معلّقة: **{pending}** | إجمالي: {total_r}"
         )
 
-    # ── 13. عدد الكليات ──────────────────────────────────────────────────────
-    if re.search(r'(كم|عدد).{0,15}(كليات|الكليات)', q):
-        rows = db.query(models.Faculty).all()
-        names = " | ".join(f.id for f in rows)
-        return f"عدد الكليات في النظام: **{len(rows)}**\n• {names}"
-
-    # ── 14. قائمة الطلاب (بدون فلتر) ───────────────────────────────────────
-    if re.search(r'^(اعرض|عرض|قائمة)\s+(الطلاب|طلاب)$', q.strip()):
-        rows = db.query(models.Student).limit(10).all()
+    # ── 19. قائمة الطلاب ─────────────────────────────────────────────────────
+    if re.search(r'(اعرض|عرض|قائمة|جيب|هات)\s+(الطلاب|طلاب)\b', q) \
+       and not re.search(r'(المستوى|السنة|مقيد|موقوف|مفصول|كلية|قسم)', q):
+        rows  = db.query(models.Student).limit(10).all()
         total = db.query(models.Student).count()
-        lines = [f"📋 **قائمة الطلاب** (عرض أول 10 من {total}):"]
+        lines = [f"📋 **قائمة الطلاب** (أول 10 من {total}):"]
         for s in rows:
             lines.append(f"• {s.name} ({s.student_id}) — {s.faculty_id} — سنة {s.level} — {s.status}")
         return "\n".join(lines)
 
-    # ── 15. أسئلة خارج النطاق ────────────────────────────────────────────────
-    if re.search(r'(الطقس|نكتة|اضحكني|كرة|اخبار|اخبر|أخبار)', q):
-        return "أنا مساعد جامعي مخصص لنظام DUMLIS، لا أستطيع الإجابة على أسئلة خارج النطاق الجامعي 😊"
+    # ── 20. أعلى معدل / أفضل طالب ───────────────────────────────────────────
+    if re.search(r'(أعلى معدل|اعلى معدل|أفضل طالب|افضل طالب|أعلى gpa|highest gpa)', q, re.I):
+        s = db.query(models.Student).filter(
+            models.Student.gpa.isnot(None)).order_by(models.Student.gpa.desc()).first()
+        if not s: return "لا توجد بيانات معدل مسجّلة."
+        return f"🏆 أعلى معدل: **{s.name}** ({s.student_id}) — GPA: **{s.gpa}**"
+
+    # ── 21. أدنى معدل ────────────────────────────────────────────────────────
+    if re.search(r'(أدنى معدل|ادنى معدل|أضعف طالب|اضعف طالب)', q):
+        s = db.query(models.Student).filter(
+            models.Student.gpa.isnot(None)).order_by(models.Student.gpa.asc()).first()
+        if not s: return "لا توجد بيانات معدل مسجّلة."
+        return f"📉 أدنى معدل: **{s.name}** ({s.student_id}) — GPA: **{s.gpa}**"
+
+    # ── 22. توزيع المستويات ──────────────────────────────────────────────────
+    if re.search(r'(توزيع|عدد في كل مستوى|كل مستوى|كل سنة)', q):
+        lines = ["📊 **توزيع الطلاب حسب المستوى:**"]
+        for lvl in range(1, 8):
+            c = db.query(models.Student).filter(models.Student.level == lvl).count()
+            if c: lines.append(f"• المستوى {lvl}: {c} طالب")
+        return "\n".join(lines)
+
+    # ── 23. نسبة النجاح / الرسوب ─────────────────────────────────────────────
+    if re.search(r'(نسبة النجاح|نسبة الرسوب|الراسبين|الناجحين)', q):
+        total = db.query(models.Grade).filter(models.Grade.total.isnot(None)).count()
+        if total == 0: return "لا توجد درجات مسجّلة في النظام."
+        passed = db.query(models.Grade).filter(models.Grade.total >= 60).count()
+        failed = total - passed
+        return (
+            f"📊 **نتائج الدرجات:**\n"
+            f"• ناجح: {passed} | راسب: {failed} | إجمالي: {total}\n"
+            f"• نسبة النجاح: **{round(passed/total*100,1)}%**"
+        )
+
+    # ── 24. طلاب اللائحة ─────────────────────────────────────────────────────
+    if re.search(r'(لائحة قديمة|لائحة جديدة|اللائحة)', q):
+        for reg, label in [("لائحة جديدة","الجديدة"), ("لائحة قديمة","القديمة")]:
+            if re.search(reg, q):
+                c = db.query(models.Student).filter(models.Student.regulation == reg).count()
+                return f"طلاب اللائحة {label}: **{c}** طالب"
+        old = db.query(models.Student).filter(models.Student.regulation == "لائحة قديمة").count()
+        new = db.query(models.Student).filter(models.Student.regulation == "لائحة جديدة").count()
+        return f"📋 **اللوائح:**\n• لائحة جديدة: {new} | لائحة قديمة: {old}"
+
+    # ── 25. عدد المواد في الكورس ─────────────────────────────────────────────
+    if re.search(r'(كم عدد المواد|كم مادة|عدد المقررات)', q):
+        c = db.query(models.Course).count()
+        return f"عدد المقررات في النظام: **{c}** مادة"
+
+    # ── 26. كيفية إضافة طالب ─────────────────────────────────────────────────
+    if re.search(r'(كيف.{0,10}(اضيف|أضيف|اضافة|إضافة).{0,10}طالب)', q):
+        return (
+            "📝 **لإضافة طالب جديد:**\n"
+            "اذهب إلى قسم «بيانات الطلاب» من القائمة الجانبية، ثم اضغط «إضافة طالب».\n"
+            "البيانات المطلوبة: الاسم، كود الطالب، الرقم القومي، الكلية، المستوى، الحالة.\n"
+            "أو يمكنك إخباري ببيانات الطالب وسأضيفه مباشرة."
+        )
+
+    # ── 27. كيفية إغلاق مقرر ─────────────────────────────────────────────────
+    if re.search(r'(كيف.{0,10}(اغلق|أغلق|غلق|إغلاق).{0,10}مقرر)', q):
+        return (
+            "🔒 **لإغلاق مقرر دراسي:**\n"
+            "اذهب إلى «غلق المقررات» من القائمة، اختر المادة والفصل الدراسي وأكّد الإغلاق.\n"
+            "بعد الإغلاق لن تُقبل تسجيلات جديدة على المادة."
+        )
+
+    # ── 28. كيفية إصدار إذن دفع ──────────────────────────────────────────────
+    if re.search(r'(إذن دفع|اذن دفع|كيف.{0,10}(اصدر|أصدر|إصدار))', q):
+        return (
+            "💳 **لإصدار إذن دفع:**\n"
+            "اذهب إلى «البيانات المالية → إذن دفع» من القائمة.\n"
+            "أدخل كود الطالب أو ابحث بالاسم، حدد المبلغ والسنة الدراسية، ثم اطبع الإذن."
+        )
+
+    # ── 29. الصلاحيات ────────────────────────────────────────────────────────
+    if re.search(r'(صلاحيات|صلاحيتي|ماذا أستطيع|ما الذي أستطيع)', q):
+        role = user.role
+        perms = {
+            "super_admin":     "لديك صلاحيات كاملة على النظام: إدارة الطلاب، الكليات، المستخدمين، الدرجات، الماليات، الإعلانات وكل العمليات.",
+            "faculty_admin":   "لديك صلاحيات إدارة طلاب كليتك: الدرجات، الحضور، الرسوم، التسجيلات، والإعلانات.",
+            "student_affairs": "لديك صلاحيات عرض وتعديل بيانات الطلاب والوثائق وطلبات التسجيل.",
+            "student":         "يمكنك عرض درجاتك وجدولك وحضورك وبياناتك الشخصية فقط.",
+        }
+        return f"🔐 **صلاحياتك ({role}):**\n{perms.get(role,'صلاحيات غير معروفة')}"
+
+    # ── 30. السلام والتحية ────────────────────────────────────────────────────
+    if re.search(r'^(مرحبا|مرحباً|أهلاً|اهلا|السلام عليكم|هاي|hi|hello|صباح|مساء)', q, re.I):
+        return "أهلاً وسهلاً! 👋 أنا مساعد نظام DUMLIS. يمكنني مساعدتك في:\n• بيانات الطلاب والدرجات والحضور\n• الإحصائيات والتقارير\n• السجلات المالية\n\nبماذا يمكنني مساعدتك؟"
+
+    # ── 31. شكر / ختام ───────────────────────────────────────────────────────
+    if re.search(r'^(شكرا|شكراً|ممتاز|تمام|عظيم|أحسنت|احسنت|ok|okay|كويس|برافو)', q, re.I):
+        return "على الرحب والسعة! 😊 هل تحتاج لشيء آخر؟"
+
+    # ── 32. أسئلة خارج النطاق ────────────────────────────────────────────────
+    if re.search(r'(الطقس|نكتة|اضحكني|كرة القدم|أخبار|اخبار|برنامج تلفزيون|موسيقى|'
+                 r'وصفة|طبخ|رياضة|سياسة|دين|فلسفة|شعر|قصيدة)', q):
+        return "أنا مساعد جامعي متخصص في نظام DUMLIS فقط 😊 لا أستطيع الإجابة على هذا السؤال."
 
     return None  # لم يتطابق أي pattern → انتقل للـ AI
 
