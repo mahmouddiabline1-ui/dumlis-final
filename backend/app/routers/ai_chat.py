@@ -159,20 +159,30 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
         return m.group(1) if m else None
 
     def _level_in(text: str):
-        m = re.search(r'(?:المستوى|السنة|العام)\s*(?:ال)?(\w+)', text)
-        if not m: return None
-        w = m.group(1).rstrip('ة')  # strip taa marbuta: رابعة→رابع
-        words = {
-            "اول":1,"أول":1,"اولى":1,"أولى":1,
-            "ثاني":2,"ثانية":2,"ثانيه":2,
-            "ثالث":3,"ثالثة":3,
-            "رابع":4,"رابعة":4,
-            "خامس":5,"خامسة":5,
-            "سادس":6,"سادسة":6,
-            "سابع":7,"سابعة":7,
+        LEVEL_WORDS = {
+            "اول":1,"أول":1,"اولى":1,"أولى":1,"الاول":1,"الأول":1,"الاولى":1,"الأولى":1,
+            "ثاني":2,"ثانية":2,"ثانيه":2,"الثاني":2,"الثانية":2,
+            "ثالث":3,"ثالثة":3,"الثالث":3,"الثالثة":3,
+            "رابع":4,"رابعة":4,"الرابع":4,"الرابعة":4,
+            "خامس":5,"خامسة":5,"الخامس":5,"الخامسة":5,
+            "سادس":6,"سادسة":6,"السادس":6,"السادسة":6,
+            "سابع":7,"سابعة":7,"السابع":7,"السابعة":7,
             "1":1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7,
         }
-        return words.get(w) or words.get(m.group(1))
+        # with prefix: المستوى الثالث / السنة الثانية
+        m = re.search(r'(?:المستوى|السنة|العام)\s*(?:ال)?(\w+)', text)
+        if m:
+            w = m.group(1).rstrip('ة')
+            v = LEVEL_WORDS.get(m.group(1)) or LEVEL_WORDS.get(w)
+            if v: return v
+        # standalone ordinal: "طلاب الثالث" / "عدد الرابعة"
+        m2 = re.search(r'\b(الاول|الأول|الاولى|الأولى|الثاني|الثانية|الثالث|الثالثة|'
+                       r'الرابع|الرابعة|الخامس|الخامسة|السادس|السادسة|السابع|السابعة)\b', text)
+        if m2: return LEVEL_WORDS.get(m2.group(1))
+        # digit: مستوى 3
+        m3 = re.search(r'(?:مستوى|سنة)\s*([1-7])', text)
+        if m3: return int(m3.group(1))
+        return None
 
     def _payment_stats():
         total  = db.query(models.Student).count()
