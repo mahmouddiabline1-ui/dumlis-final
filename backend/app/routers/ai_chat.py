@@ -145,6 +145,24 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
     from sqlalchemy import func
     q = question.strip()
 
+    # ── كشف أسئلة متعددة مرقمة في رسالة واحدة ───────────────────────────────
+    # مثال: "1. عدد الطلاب\n2. نسبة السداد\n..."
+    multi = re.findall(r'(?:^|\n)\s*\d+[\.\-\)]\s*(.+)', q)
+    if len(multi) >= 2:
+        answers = []
+        for idx, sub_q in enumerate(multi, 1):
+            sub_q = sub_q.strip()
+            if not sub_q:
+                continue
+            ans = _try_direct(sub_q, db, user)
+            if ans:
+                answers.append(f"**{idx}. {sub_q}**\n{ans}")
+            else:
+                answers.append(f"**{idx}. {sub_q}**\n⏳ هذا السؤال يحتاج مراجعة يدوية أو بيانات إضافية.")
+        if answers:
+            return "\n\n---\n\n".join(answers)
+        return None
+
     # فلتر الكلية: super_admin يشوف الكل، faculty_admin يشوف كليته فقط
     fid = None
     if user and getattr(user, 'role', None) != 'super_admin':
