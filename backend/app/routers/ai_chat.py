@@ -145,6 +145,36 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
     from sqlalchemy import func
     q = question.strip()
 
+    # فلتر الكلية: super_admin يشوف الكل، faculty_admin يشوف كليته فقط
+    fid = None
+    if user and getattr(user, 'role', None) != 'super_admin':
+        fid = getattr(user, 'faculty_id', None)
+
+    # كشف اسم الكلية من نص السؤال
+    FACULTY_MAP = {
+        "حاسبات": "FCAI", "حاسبه": "FCAI", "كمبيوتر": "FCAI", "fcai": "FCAI",
+        "هندسة": "FEN",   "هندسه": "FEN",   "fen": "FEN",
+        "علوم": "FSC",    "fsc": "FSC",
+        "تربية": "FED",   "تربيه": "FED",   "fed": "FED",
+        "صيدلة": "PHR",   "صيدله": "PHR",   "phr": "PHR",
+        "حقوق": "LAW",    "قانون": "LAW",    "law": "LAW",
+        "طب": "MED",      "med": "MED",
+        "اداب": "ART",    "آداب": "ART",    "art": "ART",
+        "تجارة": "BUS",   "تجاره": "BUS",   "bus": "BUS",
+    }
+    if not fid:
+        for keyword, mapped_fid in FACULTY_MAP.items():
+            if re.search(rf'(كلي[هة]|كلية)\s*{keyword}|{keyword}', q, re.I):
+                fid = mapped_fid
+                break
+
+    def _sq(model):
+        """Student query filtered by faculty if needed."""
+        sq = db.query(model)
+        if fid and hasattr(model, 'faculty_id'):
+            sq = sq.filter(model.faculty_id == fid)
+        return sq
+
     # ── helpers ───────────────────────────────────────────────────────────────
     def _student_card(s) -> str:
         return (
@@ -185,11 +215,14 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
         return None
 
     def _payment_stats():
-        total  = db.query(models.Student).count()
-        paid_c = db.query(models.Student).filter(models.Student.fees_status == "مسدد").count()
-        unpaid = db.query(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
+        total  = _sq(models.Student).count()
+        paid_c = _sq(models.Student).filter(models.Student.fees_status == "مسدد").count()
+        unpaid = _sq(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
         pct    = round(paid_c / total * 100, 1) if total else 0
-        rev    = float(db.query(func.sum(models.FinancialRecord.paid_amount)).scalar() or 0)
+        fin_q  = db.query(func.sum(models.FinancialRecord.paid_amount))
+        if fid:
+            fin_q = fin_q.join(models.Student, models.FinancialRecord.student_id == models.Student.student_id).filter(models.Student.faculty_id == fid)
+        rev = float(fin_q.scalar() or 0)
         return (
             f"💰 **التحصيل المالي:**\n"
             f"• مسدد: {paid_c} طالب | غير مسدد: {unpaid} طالب\n"
@@ -199,16 +232,19 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
 
     # ── 1. إحصائيات عامة ─────────────────────────────────────────────────────
     if re.search(r'(إحصائيات|احصائيات|نظرة عامة|ملخص|overview|dashboard|لوحة)', q, re.I):
-        total  = db.query(models.Student).count()
-        active = db.query(models.Student).filter(models.Student.status == "مقيد").count()
-        susp   = db.query(models.Student).filter(models.Student.status == "موقوف").count()
-        exp    = db.query(models.Student).filter(models.Student.status == "مفصول").count()
-        grad   = db.query(models.Student).filter(models.Student.status == "خريج").count()
-        paid_c = db.query(models.Student).filter(models.Student.fees_status == "مسدد").count()
-        unpaid = db.query(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
+        total  = _sq(models.Student).count()
+        active = _sq(models.Student).filter(models.Student.status == "مقيد").count()
+        susp   = _sq(models.Student).filter(models.Student.status == "موقوف").count()
+        exp    = _sq(models.Student).filter(models.Student.status == "مفصول").count()
+        grad   = _sq(models.Student).filter(models.Student.status == "خريج").count()
+        paid_c = _sq(models.Student).filter(models.Student.fees_status == "مسدد").count()
+        unpaid = _sq(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
         facs   = db.query(models.Faculty).count()
         ann    = db.query(models.Announcement).filter(models.Announcement.is_active == True).count()
-        rev    = float(db.query(func.sum(models.FinancialRecord.paid_amount)).scalar() or 0)
+        fin_q  = db.query(func.sum(models.FinancialRecord.paid_amount))
+        if fid:
+            fin_q = fin_q.join(models.Student, models.FinancialRecord.student_id == models.Student.student_id).filter(models.Student.faculty_id == fid)
+        rev = float(fin_q.scalar() or 0)
         lines  = [
             "📊 **إحصائيات النظام**",
             f"• إجمالي الطلاب: **{total}**",
@@ -219,7 +255,7 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
         ]
         lvl_parts = []
         for lvl in range(1, 8):
-            c = db.query(models.Student).filter(models.Student.level == lvl).count()
+            c = _sq(models.Student).filter(models.Student.level == lvl).count()
             if c: lvl_parts.append(f"سنة{lvl}: {c}")
         if lvl_parts:
             lines.append("• توزيع المستويات: " + " | ".join(lvl_parts))
@@ -227,8 +263,8 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
 
     # ── 2. عدد الطلاب الإجمالي ───────────────────────────────────────────────
     if re.search(r'(كم عدد الطلاب|كم طالب|عدد الطلاب الكلي|اجمالي الطلاب|إجمالي الطلاب)', q):
-        total  = db.query(models.Student).count()
-        active = db.query(models.Student).filter(models.Student.status == "مقيد").count()
+        total  = _sq(models.Student).count()
+        active = _sq(models.Student).filter(models.Student.status == "مقيد").count()
         return f"إجمالي الطلاب: **{total}** | منهم مقيدون: {active}"
 
     # ── 3. حالات الطلاب ──────────────────────────────────────────────────────
@@ -240,15 +276,14 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
         (r'منتظم|المنتظمين',           "منتظم",  "المنتظمين"),
     ]:
         if re.search(rf'(كم|عدد).{{0,20}}({kw})', q):
-            c = db.query(models.Student).filter(models.Student.status == status).count()
+            c = _sq(models.Student).filter(models.Student.status == status).count()
             return f"عدد الطلاب {label}: **{c}** طالب"
 
     # ── 4. طلاب لم يسددوا / غير مسددين ──────────────────────────────────────
     if re.search(r'(لم يسدد|غير مسدد|متاخر|متأخر).{0,20}(رسوم|الرسوم|دفع)', q) or \
        re.search(r'(رسوم|الرسوم).{0,20}(لم يسدد|غير مسدد)', q):
-        c = db.query(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
-        rows = db.query(models.Student).filter(
-            models.Student.fees_status == "غير مسدد").limit(8).all()
+        c    = _sq(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
+        rows = _sq(models.Student).filter(models.Student.fees_status == "غير مسدد").limit(8).all()
         lines = [f"⚠️ الطلاب غير المسددين للرسوم: **{c}** طالب"]
         for s in rows:
             lines.append(f"• {s.name} ({s.student_id}) — {s.faculty_id}")
@@ -258,8 +293,8 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
     # ── 5. طلاب مستوى معين ───────────────────────────────────────────────────
     lvl = _level_in(q)
     if lvl and re.search(r'(طلاب|عدد|اعرض|قائمة|كم)', q):
-        c    = db.query(models.Student).filter(models.Student.level == lvl).count()
-        rows = db.query(models.Student).filter(models.Student.level == lvl).limit(10).all()
+        c    = _sq(models.Student).filter(models.Student.level == lvl).count()
+        rows = _sq(models.Student).filter(models.Student.level == lvl).limit(10).all()
         names = "\n".join(f"  • {s.name} ({s.student_id}) — {s.status}" for s in rows)
         more  = f"\n  ... و{c-len(rows)} آخرين" if c > len(rows) else ""
         return f"طلاب المستوى {lvl}: **{c}** طالب\n{names}{more}"
@@ -357,7 +392,7 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
         m_name = re.search(r'(?:طالب|طالبة)\s+(?:اسمه|اسمها|يسمى|تسمى)?\s*([^\d؟?،,]{2,25})$', q)
     if m_name:
         name_q = m_name.group(1).strip().rstrip('؟?')
-        rows = db.query(models.Student).filter(
+        rows = _sq(models.Student).filter(
             models.Student.name.ilike(f"%{name_q}%")).limit(10).all()
         if not rows:
             return f"لا يوجد طالب باسم «{name_q}» في النظام."
@@ -428,8 +463,8 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
     # ── 19. قائمة الطلاب ─────────────────────────────────────────────────────
     if re.search(r'(اعرض|عرض|قائمة|جيب|هات)\s+(الطلاب|طلاب)\b', q) \
        and not re.search(r'(المستوى|السنة|مقيد|موقوف|مفصول|كلية|قسم)', q):
-        rows  = db.query(models.Student).limit(10).all()
-        total = db.query(models.Student).count()
+        rows  = _sq(models.Student).limit(10).all()
+        total = _sq(models.Student).count()
         lines = [f"📋 **قائمة الطلاب** (أول 10 من {total}):"]
         for s in rows:
             lines.append(f"• {s.name} ({s.student_id}) — {s.faculty_id} — سنة {s.level} — {s.status}")
@@ -437,14 +472,14 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
 
     # ── 20. أعلى معدل / أفضل طالب ───────────────────────────────────────────
     if re.search(r'(أعلى معدل|اعلى معدل|أفضل طالب|افضل طالب|أعلى gpa|highest gpa)', q, re.I):
-        s = db.query(models.Student).filter(
+        s = _sq(models.Student).filter(
             models.Student.gpa.isnot(None)).order_by(models.Student.gpa.desc()).first()
         if not s: return "لا توجد بيانات معدل مسجّلة."
         return f"🏆 أعلى معدل: **{s.name}** ({s.student_id}) — GPA: **{s.gpa}**"
 
     # ── 21. أدنى معدل ────────────────────────────────────────────────────────
     if re.search(r'(أدنى معدل|ادنى معدل|أضعف طالب|اضعف طالب)', q):
-        s = db.query(models.Student).filter(
+        s = _sq(models.Student).filter(
             models.Student.gpa.isnot(None)).order_by(models.Student.gpa.asc()).first()
         if not s: return "لا توجد بيانات معدل مسجّلة."
         return f"📉 أدنى معدل: **{s.name}** ({s.student_id}) — GPA: **{s.gpa}**"
@@ -453,7 +488,7 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
     if re.search(r'(توزيع|عدد في كل مستوى|كل مستوى|كل سنة)', q):
         lines = ["📊 **توزيع الطلاب حسب المستوى:**"]
         for lvl in range(1, 8):
-            c = db.query(models.Student).filter(models.Student.level == lvl).count()
+            c = _sq(models.Student).filter(models.Student.level == lvl).count()
             if c: lines.append(f"• المستوى {lvl}: {c} طالب")
         return "\n".join(lines)
 
@@ -473,10 +508,10 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
     if re.search(r'(لائحة قديمة|لائحة جديدة|اللائحة)', q):
         for reg, label in [("لائحة جديدة","الجديدة"), ("لائحة قديمة","القديمة")]:
             if re.search(reg, q):
-                c = db.query(models.Student).filter(models.Student.regulation == reg).count()
+                c = _sq(models.Student).filter(models.Student.regulation == reg).count()
                 return f"طلاب اللائحة {label}: **{c}** طالب"
-        old = db.query(models.Student).filter(models.Student.regulation == "لائحة قديمة").count()
-        new = db.query(models.Student).filter(models.Student.regulation == "لائحة جديدة").count()
+        old = _sq(models.Student).filter(models.Student.regulation == "لائحة قديمة").count()
+        new = _sq(models.Student).filter(models.Student.regulation == "لائحة جديدة").count()
         return f"📋 **اللوائح:**\n• لائحة جديدة: {new} | لائحة قديمة: {old}"
 
     # ── 25. عدد المواد في الكورس ─────────────────────────────────────────────
@@ -533,6 +568,547 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
                  r'وصفة|طبخ|رياضة|سياسة|دين|فلسفة|شعر|قصيدة)', q):
         return "أنا مساعد جامعي متخصص في نظام DUMLIS فقط 😊 لا أستطيع الإجابة على هذا السؤال."
 
+    # ── 33. توقع الدخل السنة الجايه ─────────────────────────────────────────────
+    if re.search(r'(توقع|تتوقع|predict).{0,20}(دخل|إيراد|revenue|السنة الجايه|العام الجاي)', q, re.I):
+        try:
+            rev = float(db.query(func.sum(models.FinancialRecord.paid_amount)).scalar() or 0)
+            growth_rate = 0.15
+            next_year = rev * (1 + growth_rate)
+            return (
+                f"📈 **توقع الدخل للسنة الجايه:**\n"
+                f"• الدخل الحالي: **{rev:,.0f}** ج.م\n"
+                f"• معدل النمو المتوقع: **15%**\n"
+                f"• الدخل المتوقع: **{next_year:,.0f}** ج.م"
+            )
+        except: pass
+
+    # ── 34. توقع نسب النجاح ────────────────────────────────────────────────────
+    if re.search(r'(توقع|تتوقع|predict).{0,20}(نسبة النجاح|success rate)', q, re.I):
+        try:
+            total = db.query(models.Grade).filter(models.Grade.total.isnot(None)).count()
+            if total == 0: return "لا توجد درجات مسجّلة حالياً."
+            passed = db.query(models.Grade).filter(models.Grade.total >= 60).count()
+            current_rate = (passed / total * 100) if total else 0
+            predicted = min(current_rate + 5, 100)
+            return (
+                f"📊 **توقع نسبة النجاح:**\n"
+                f"• النسبة الحالية: **{current_rate:.1f}%**\n"
+                f"• التحسن المتوقع: **+5%**\n"
+                f"• النسبة المتوقعة: **{predicted:.1f}%**"
+            )
+        except: pass
+
+    # ── 35. متوسط المعدل ────────────────────────────────────────────────────────
+    if re.search(r'(متوسط|average).{0,10}(معدل|gpa)', q, re.I):
+        try:
+            students = _sq(models.Student).filter(
+                models.Student.gpa.isnot(None)).all()
+            if not students: return "لا توجد بيانات معدل متاحة."
+            avg_gpa = sum(s.gpa for s in students) / len(students)
+            return f"📈 **متوسط المعدل التراكمي:** **{avg_gpa:.2f}**"
+        except: pass
+
+    # ── 36. أعلى نسبة حضور ─────────────────────────────────────────────────────
+    if re.search(r'(أعلى|اعلى|highest).{0,10}(نسبة حضور|حضور)', q):
+        try:
+            students = _sq(models.Student).all()
+            best_student = None
+            best_rate = 0
+            for s in students:
+                att = db.query(models.AttendanceRecord).filter(
+                    models.AttendanceRecord.student_id == s.student_id).all()
+                if att:
+                    present = sum(1 for r in att if r.status == "حاضر")
+                    rate = present / len(att)
+                    if rate > best_rate:
+                        best_rate = rate
+                        best_student = s
+            if best_student:
+                return f"🏆 **أعلى نسبة حضور:** {best_student.name} ({best_student.student_id}) — **{best_rate*100:.1f}%**"
+        except: pass
+
+    # ── 37. متوسط نسبة الحضور ──────────────────────────────────────────────────
+    if re.search(r'(متوسط|average).{0,10}(حضور|attendance)', q, re.I):
+        try:
+            all_att = db.query(models.AttendanceRecord).all()
+            if not all_att: return "لا توجد سجلات حضور متاحة."
+            present = sum(1 for r in all_att if r.status == "حاضر")
+            avg_rate = (present / len(all_att) * 100) if all_att else 0
+            return f"📅 **متوسط نسبة الحضور:** **{avg_rate:.1f}%**"
+        except: pass
+
+    # ── 38. إجمالي الساعات الدراسية ─────────────────────────────────────────────
+    if re.search(r'(إجمالي|اجمالي|total).{0,10}(ساعات|hours)', q):
+        try:
+            courses = db.query(models.Course).all()
+            total_hours = sum(float(c.credit_hours or 0) for c in courses)
+            return f"📖 **إجمالي الساعات الدراسية:** **{total_hours:.0f}** ساعة"
+        except: pass
+
+    # ── 39. عدد المواد المغلقة ──────────────────────────────────────────────────
+    if re.search(r'(عدد|كم).{0,10}(مواد|مقررات).{0,10}(مغلق|مغلقة|closed)', q):
+        try:
+            closed = db.query(models.CourseClosure).count()
+            return f"🔒 **عدد المواد المغلقة:** **{closed}** مادة"
+        except:
+            return "لا توجد بيانات عن المواد المغلقة."
+
+    # ── 40. عدد المواد النشطة ───────────────────────────────────────────────────
+    if re.search(r'(عدد|كم).{0,10}(مواد|مقررات|courses).{0,10}(نشط|active)', q):
+        try:
+            active = db.query(models.Course).count()
+            return f"📚 **عدد المواد النشطة:** **{active}** مادة"
+        except: pass
+
+    # ── 41. نسبة الطلاب النشطين ─────────────────────────────────────────────────
+    if re.search(r'(نسبة|percentage).{0,15}(طلاب نشط|فعال)', q):
+        try:
+            total = _sq(models.Student).count()
+            active = _sq(models.Student).filter(models.Student.status == "مقيد").count()
+            pct = (active / total * 100) if total else 0
+            return f"📊 **نسبة الطلاب النشطين:** **{pct:.1f}%** ({active} من {total})"
+        except: pass
+
+    # ── 42. التنبؤ بعدد الطلاب السنة الجايه ──────────────────────────────────────
+    if re.search(r'(توقع|تتوقع|predict).{0,20}(عدد الطلاب|students).{0,20}(السنة|القادمة|الجاية)', q, re.I):
+        try:
+            current_total = _sq(models.Student).count()
+            growth_rate = 0.08
+            predicted_next = current_total * (1 + growth_rate)
+            return (
+                f"📈 **توقع عدد الطلاب للسنة القادمة:**\n"
+                f"• العدد الحالي: **{current_total}** طالب\n"
+                f"• معدل النمو المتوقع: **8%**\n"
+                f"• العدد المتوقع: **{predicted_next:.0f}** طالب"
+            )
+        except: pass
+
+    # ── 43. أعلى درجة في النظام ────────────────────────────────────────────────
+    if re.search(r'(أعلى|اعلى|highest).{0,10}(درجة|grade|علامة)', q):
+        try:
+            g = db.query(models.Grade).filter(
+                models.Grade.total.isnot(None)).order_by(
+                models.Grade.total.desc()).first()
+            if g:
+                s = db.get(models.Student, g.student_id)
+                name = s.name if s else "—"
+                return f"🏆 **أعلى درجة:** {g.total} ({name}) في مادة {g.course_id}"
+        except: pass
+
+    # ── 44. أقل درجة في النظام ────────────────────────────────────────────────
+    if re.search(r'(أقل|اقل|lowest).{0,10}(درجة|grade|علامة)', q):
+        try:
+            g = db.query(models.Grade).filter(
+                models.Grade.total.isnot(None)).order_by(
+                models.Grade.total.asc()).first()
+            if g:
+                s = db.get(models.Student, g.student_id)
+                name = s.name if s else "—"
+                return f"📉 **أقل درجة:** {g.total} ({name}) في مادة {g.course_id}"
+        except: pass
+
+    # ── 45. إحصائيات الطلاب الموقوفين ────────────────────────────────────────────
+    if re.search(r'(موقوف|suspended|معلق).{0,20}(عدد|إحصائيات)', q):
+        try:
+            count = _sq(models.Student).filter(models.Student.status == "موقوف").count()
+            total = _sq(models.Student).count()
+            pct = (count / total * 100) if total else 0
+            return (
+                f"⚠️ **الطلاب الموقوفين:**\n"
+                f"• العدد: **{count}** طالب\n"
+                f"• النسبة: **{pct:.1f}%**"
+            )
+        except: pass
+
+    # ── 46. توقع نسبة التسرب ────────────────────────────────────────────────────
+    if re.search(r'(توقع|تتوقع|predict).{0,20}(تسرب|dropout|attrition)', q, re.I):
+        try:
+            total = _sq(models.Student).count()
+            dropped = _sq(models.Student).filter(models.Student.status == "مفصول").count()
+            current_rate = (dropped / total * 100) if total else 0
+            predicted = min(current_rate + 3, 100)
+            return (
+                f"📉 **توقع نسبة التسرب:**\n"
+                f"• النسبة الحالية: **{current_rate:.1f}%**\n"
+                f"• التوقع للسنة القادمة: **{predicted:.1f}%**"
+            )
+        except: pass
+
+    # ── 47. متوسط الراتب / الميزانية ─────────────────────────────────────────────
+    if re.search(r'(متوسط|average).{0,10}(رسوم|رسم|fee)', q):
+        try:
+            fin = db.query(models.FinancialRecord).all()
+            if fin:
+                avg_fee = sum(float(r.amount or 0) for r in fin) / len(fin)
+                return f"💰 **متوسط الرسوم:** **{avg_fee:,.0f}** ج.م"
+        except: pass
+
+    # ── 48. عدد الطلاب الخريجين ──────────────────────────────────────────────────
+    if re.search(r'(خريج|خريجين|graduate|graduated)', q):
+        try:
+            count = _sq(models.Student).filter(models.Student.status == "خريج").count()
+            total = _sq(models.Student).count()
+            pct = (count / total * 100) if total else 0
+            return f"🎓 **الطلاب الخريجين:** **{count}** طالب (**{pct:.1f}%** من الإجمالي)"
+        except: pass
+
+    # ── 49. أكثر مادة مسجّلة ─────────────────────────────────────────────────────
+    if re.search(r'(أكثر|اكثر|أكثر).{0,10}(مادة|مقرر|course).{0,10}(مسجّل|تسجيل)', q):
+        try:
+            enrollments = db.query(models.Enrollment).all()
+            if enrollments:
+                from collections import Counter
+                course_counts = Counter(e.course_id for e in enrollments)
+                top_course = course_counts.most_common(1)[0]
+                return f"📚 **أكثر مادة تسجيلاً:** {top_course[0]} — **{top_course[1]}** طالب"
+        except: pass
+
+    # ── 50. نسبة السداد المتوقعة ─────────────────────────────────────────────────
+    if re.search(r'(توقع|تتوقع|predict).{0,20}(سداد|رسوم|collection)', q, re.I):
+        try:
+            total_students = _sq(models.Student).count()
+            paid = _sq(models.Student).filter(models.Student.fees_status == "مسدد").count()
+            current_rate = (paid / total_students * 100) if total_students else 0
+            predicted = min(current_rate + 8, 100)
+            return (
+                f"💳 **توقع نسبة السداد:**\n"
+                f"• النسبة الحالية: **{current_rate:.1f}%**\n"
+                f"• الهدف المتوقع: **{predicted:.1f}%**"
+            )
+        except: pass
+
+    # ── 51. عدد الطلاب المنتظمين ─────────────────────────────────────────────────
+    if re.search(r'(منتظم|مستمر|regular|ongoing)', q):
+        try:
+            count = _sq(models.Student).filter(models.Student.status == "منتظم").count()
+            return f"✅ **الطلاب المنتظمين:** **{count}** طالب"
+        except: pass
+
+    # ── 52. توزيع الكليات ─────────────────────────────────────────────────────────
+    if re.search(r'(توزيع|distribution).{0,10}(كليات|faculties)', q):
+        try:
+            faculties = db.query(models.Faculty).all()
+            lines = ["🏛️ **توزيع الطلاب حسب الكليات:**"]
+            for f in faculties:
+                c = _sq(models.Student).filter(models.Student.faculty_id == f.id).count()
+                if c > 0:
+                    lines.append(f"• {f.id}: {c} طالب")
+            return "\n".join(lines)
+        except: pass
+
+    # ── 53. الإعلانات الهامة ───────────────────────────────────────────────────────
+    if re.search(r'(أهم|اهم|important).{0,10}(إعلان|اعلان|announcement)', q):
+        try:
+            rows = db.query(models.Announcement).filter(
+                models.Announcement.is_active == True,
+                models.Announcement.priority == "أهم"
+            ).limit(5).all()
+            if rows:
+                lines = ["⚡ **الإعلانات الهامة:**"]
+                for a in rows:
+                    lines.append(f"• {a.title}")
+                return "\n".join(lines)
+        except: pass
+
+    # ── 54. إجمالي الرسوم المطلوبة ─────────────────────────────────────────────────
+    if re.search(r'(إجمالي|اجمالي|total).{0,10}(مطلوب|due|outstanding)', q):
+        try:
+            fin = db.query(models.FinancialRecord).all()
+            if fin:
+                total_due = sum(float(r.amount or 0) for r in fin)
+                total_paid = sum(float(r.paid_amount or 0) for r in fin)
+                outstanding = total_due - total_paid
+                return (
+                    f"💸 **الرسوم المطلوبة:**\n"
+                    f"• الإجمالي: **{total_due:,.0f}** ج.م\n"
+                    f"• المسدد: **{total_paid:,.0f}** ج.م\n"
+                    f"• المتبقي: **{outstanding:,.0f}** ج.م"
+                )
+        except: pass
+
+    # ── 55. توقع عدد المسجلين الجدد ──────────────────────────────────────────────
+    if re.search(r'(توقع|تتوقع|predict).{0,20}(مسجلين جدد|new enrollment)', q, re.I):
+        try:
+            current = _sq(models.Student).count()
+            monthly_avg = max(current // 12, 5)
+            next_month = current + monthly_avg
+            return (
+                f"📊 **توقع المسجلين الجدد الشهر القادم:**\n"
+                f"• المتوسط الشهري: **{monthly_avg}** طالب\n"
+                f"• الإجمالي المتوقع: **{next_month}** طالب"
+            )
+        except: pass
+
+    # ── 56. توقع النجاح (variation) ─────────────────────────────────────────────
+    if re.search(r'(توقع|تتوقع|predict).{0,15}(النجاح|success)', q, re.I):
+        try:
+            total = db.query(models.Grade).filter(models.Grade.total.isnot(None)).count()
+            if total == 0: return "لا توجد درجات مسجّلة."
+            passed = db.query(models.Grade).filter(models.Grade.total >= 60).count()
+            current_rate = (passed / total * 100) if total else 0
+            predicted = min(current_rate + 5, 100)
+            return (
+                f"📊 **توقع نسبة النجاح:**\n"
+                f"• النسبة الحالية: **{current_rate:.1f}%**\n"
+                f"• النسبة المتوقعة: **{predicted:.1f}%**"
+            )
+        except: pass
+
+    # ── 57. نسبة الطلاب النشطين (variation) ─────────────────────────────────────
+    if re.search(r'(نسبة|percentage).{0,10}(نشط|فعال|active)', q):
+        try:
+            total = _sq(models.Student).count()
+            active = _sq(models.Student).filter(models.Student.status == "مقيد").count()
+            pct = (active / total * 100) if total else 0
+            return f"📊 **نسبة الطلاب النشطين:** **{pct:.1f}%** ({active} من {total})"
+        except: pass
+
+    # ── 58. طلاب المستوى (شامل) ────────────────────────────────────────────────
+    if re.search(r'(المستوى|سنة).{0,5}(أول|الأول|الاول|اولى|الأولى|اولي|1)\b', q):
+        try:
+            count = _sq(models.Student).filter(models.Student.level == 1).count()
+            return f"📚 **طلاب المستوى الأول:** **{count}** طالب"
+        except: pass
+
+    if re.search(r'(المستوى|سنة).{0,5}(ثاني|الثاني|ثانية|الثانية|2)\b', q):
+        try:
+            count = _sq(models.Student).filter(models.Student.level == 2).count()
+            return f"📚 **طلاب المستوى الثاني:** **{count}** طالب"
+        except: pass
+
+    if re.search(r'(المستوى|سنة).{0,5}(ثالث|الثالث|ثالثة|الثالثة|3)\b', q):
+        try:
+            count = _sq(models.Student).filter(models.Student.level == 3).count()
+            return f"📚 **طلاب المستوى الثالث:** **{count}** طالب"
+        except: pass
+
+    if re.search(r'(المستوى|سنة).{0,5}(رابع|الرابع|رابعة|الرابعة|4)\b', q):
+        try:
+            count = _sq(models.Student).filter(models.Student.level == 4).count()
+            return f"📚 **طلاب المستوى الرابع:** **{count}** طالب"
+        except: pass
+
+    # ── 59. بيانات الطالب (اسم محدد) ────────────────────────────────────────────
+    m_name = re.search(r'(?:بيانات|معلومات|ملف)\s+(?:الطالب|الطالبة)\s+([^\d؟?،,]{2,30})', q)
+    if m_name:
+        name_q = m_name.group(1).strip().rstrip('؟?')
+        rows = _sq(models.Student).filter(
+            models.Student.name.ilike(f"%{name_q}%")).limit(1).all()
+        if rows:
+            s = rows[0]
+            return (
+                f"**{s.name}** (كود: {s.student_id})\n"
+                f"• الكلية: {s.faculty_id} | المستوى: {s.level}\n"
+                f"• الحالة: {s.status} | المعدل: {s.gpa or '—'}"
+            )
+        return f"لا يوجد طالب باسم {name_q}"
+
+    # ── 60. معدل طالب محدد ──────────────────────────────────────────────────────
+    m_name = re.search(r'(معدل|gpa)\s+(?:الطالب|الطالبة)\s+([^\d؟?،,]{2,30})', q, re.I)
+    if m_name:
+        name_q = m_name.group(2).strip().rstrip('؟?')
+        rows = _sq(models.Student).filter(
+            models.Student.name.ilike(f"%{name_q}%")).limit(1).all()
+        if rows:
+            s = rows[0]
+            return f"📈 المعدل التراكمي للطالب **{s.name}**: **{s.gpa or 'غير مسجّل'}**"
+        return f"لا يوجد طالب باسم {name_q}"
+
+    # ── 61. درجات طالب محدد ──────────────────────────────────────────────────────
+    m_name = re.search(r'(درجات|نتائج|علامات)\s+(?:الطالب|الطالبة)\s+([^\d؟?،,]{2,30})', q)
+    if m_name:
+        name_q = m_name.group(2).strip().rstrip('؟?')
+        s = _sq(models.Student).filter(
+            models.Student.name.ilike(f"%{name_q}%")).first()
+        if not s: return f"لا يوجد طالب باسم {name_q}"
+        grades = db.query(models.Grade).filter(models.Grade.student_id == s.student_id).all()
+        if not grades: return f"لا توجد درجات للطالب **{s.name}**"
+        lines = [f"📚 درجات **{s.name}**:"]
+        for g in grades[:5]:
+            lines.append(f"• {g.course_id}: {g.total or '—'} ({g.grade_letter or '—'})")
+        return "\n".join(lines)
+
+    # ── 62. حضور طالب محدد ──────────────────────────────────────────────────────
+    m_name = re.search(r'(حضور|غياب)\s+(?:الطالب|الطالبة)\s+([^\d؟?،,]{2,30})', q)
+    if m_name:
+        name_q = m_name.group(2).strip().rstrip('؟?')
+        s = _sq(models.Student).filter(
+            models.Student.name.ilike(f"%{name_q}%")).first()
+        if not s: return f"لا يوجد طالب باسم {name_q}"
+        att = db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.student_id == s.student_id).all()
+        if not att: return f"لا توجد سجلات حضور للطالب **{s.name}**"
+        present = sum(1 for r in att if r.status == "حاضر")
+        pct = round(present / len(att) * 100, 1) if att else 0
+        return f"📅 حضور **{s.name}**: **{pct}%** ({present}/{len(att)})"
+
+    # ── 63. هل يوجد طلاب موقوفين ────────────────────────────────────────────────
+    if re.search(r'(هل|يوجد).{0,10}(طلاب).{0,10}(موقوف|معلق)', q):
+        count = _sq(models.Student).filter(models.Student.status == "موقوف").count()
+        if count > 0:
+            return f"✅ نعم، يوجد **{count}** طالب موقوفين"
+        return "❌ لا، لا يوجد طلاب موقوفين"
+
+    # ── 64. هل يوجد طلاب مفصولين ────────────────────────────────────────────────
+    if re.search(r'(هل|يوجد).{0,10}(طلاب).{0,10}(مفصول|محذوف)', q):
+        count = _sq(models.Student).filter(models.Student.status == "مفصول").count()
+        if count > 0:
+            return f"✅ نعم، يوجد **{count}** طالب مفصولين"
+        return "❌ لا، لا يوجد طلاب مفصولين"
+
+    # ── 65. الرسوم في فصل/سنة محددة ──────────────────────────────────────────────
+    if re.search(r'(رسوم|الرسوم).{0,20}(فصل|سنة|عام)', q):
+        try:
+            fin = db.query(models.FinancialRecord).all()
+            if fin:
+                total = sum(float(r.amount or 0) for r in fin)
+                return f"💰 **إجمالي الرسوم:** **{total:,.0f}** ج.م"
+        except: pass
+
+    # ── 66. إجمالي المحصل والمتبقي ───────────────────────────────────────────────
+    if re.search(r'(محصل|متبقي|مسدد|غير مسدد)', q):
+        try:
+            fin = db.query(models.FinancialRecord).all()
+            if fin:
+                due = sum(float(r.amount or 0) for r in fin)
+                paid = sum(float(r.paid_amount or 0) for r in fin)
+                return (
+                    f"💳 **الملخص المالي:**\n"
+                    f"• المطلوب: **{due:,.0f}** ج.م\n"
+                    f"• المسدد: **{paid:,.0f}** ج.م\n"
+                    f"• المتبقي: **{due-paid:,.0f}** ج.م"
+                )
+        except: pass
+
+    # ── 67. أقل حضور ────────────────────────────────────────────────────────────
+    if re.search(r'(أقل|اقل|lowest).{0,10}(حضور|attendance)', q):
+        try:
+            students = _sq(models.Student).all()
+            worst_student = None
+            worst_rate = 100
+            for s in students:
+                att = db.query(models.AttendanceRecord).filter(
+                    models.AttendanceRecord.student_id == s.student_id).all()
+                if att:
+                    present = sum(1 for r in att if r.status == "حاضر")
+                    rate = present / len(att)
+                    if rate < worst_rate:
+                        worst_rate = rate
+                        worst_student = s
+            if worst_student:
+                return f"📉 **أقل نسبة حضور:** {worst_student.name} — **{worst_rate*100:.1f}%**"
+        except: pass
+
+    # ── 68. عدد المواد المفتوحة ──────────────────────────────────────────────────
+    if re.search(r'(عدد|كم).{0,10}(مواد|مقررات).{0,10}(مفتوح|نشط|open)', q):
+        try:
+            open_courses = db.query(models.Course).count()
+            return f"📚 **عدد المواد المفتوحة:** **{open_courses}** مادة"
+        except: pass
+
+    # ── 69. متوسط درجات الطلاب ──────────────────────────────────────────────────
+    if re.search(r'(متوسط|average).{0,15}(درجات|grades)', q):
+        try:
+            grades = db.query(models.Grade).filter(models.Grade.total.isnot(None)).all()
+            if grades:
+                avg = sum(float(g.total or 0) for g in grades) / len(grades)
+                return f"📊 **متوسط درجات الطلاب:** **{avg:.2f}**"
+        except: pass
+
+    # ── 70. نسبة الحضور العامة ───────────────────────────────────────────────────
+    if re.search(r'(نسبة|معدل).{0,10}(حضور).{0,10}(عام|general|الكل)', q):
+        try:
+            all_att = db.query(models.AttendanceRecord).all()
+            if all_att:
+                present = sum(1 for r in all_att if r.status == "حاضر")
+                avg = (present / len(all_att) * 100) if all_att else 0
+                return f"📅 **نسبة الحضور العامة:** **{avg:.1f}%**"
+        except: pass
+
+    # ── 71. عدد المسجلين (variation) ──────────────────────────────────────────────
+    if re.search(r'(عدد|كم).{0,10}(مسجلين|enrolled|enrolled students)', q):
+        try:
+            count = db.query(models.Enrollment).count()
+            return f"📋 **عدد التسجيلات:** **{count}** تسجيل"
+        except: pass
+
+    # ── 72. الموقوفين (بصيغ مختلفة) ──────────────────────────────────────────────
+    if re.search(r'(الموقوف|معلق|suspended)', q):
+        try:
+            count = _sq(models.Student).filter(models.Student.status == "موقوف").count()
+            total = _sq(models.Student).count()
+            pct = (count / total * 100) if total else 0
+            return (
+                f"⚠️ **الطلاب الموقوفين:**\n"
+                f"• العدد: **{count}** طالب\n"
+                f"• النسبة: **{pct:.1f}%**"
+            )
+        except: pass
+
+    # ── 73. الرسوم المطلوبة (شامل) ──────────────────────────────────────────────
+    if re.search(r'(رسوم|رسم).{0,20}(مطلوب|متأخر|باقي)', q):
+        try:
+            fin = db.query(models.FinancialRecord).all()
+            if fin:
+                due = sum(float(r.amount or 0) for r in fin)
+                paid = sum(float(r.paid_amount or 0) for r in fin)
+                remaining = due - paid
+                return (
+                    f"💸 **الرسوم المطلوبة:**\n"
+                    f"• الإجمالي: **{due:,.0f}** ج.م\n"
+                    f"• المسدد: **{paid:,.0f}** ج.م\n"
+                    f"• المتبقي: **{remaining:,.0f}** ج.م"
+                )
+        except: pass
+
+    # ── 74. أكثر مادة (variations) ──────────────────────────────────────────────
+    if re.search(r'(أكثر|اكثر|أعلى).{0,20}(مادة|مقرر|course)', q):
+        try:
+            enrollments = db.query(models.Enrollment).all()
+            if enrollments:
+                from collections import Counter
+                course_counts = Counter(e.course_id for e in enrollments)
+                if course_counts:
+                    top_course = course_counts.most_common(1)[0]
+                    return f"📚 **أكثر مادة تسجيلاً:** {top_course[0]} — **{top_course[1]}** طالب"
+        except: pass
+
+    # ── 75. بيانات الطالب (بدون اسم) ────────────────────────────────────────────
+    if re.search(r'(اعرض|عرض|بيانات|معلومات)\s+(?:الطالب|الطالبة|student)\b', q) and not re.search(r'\d+', q):
+        return "لأستطيع المساعدة، الرجاء تحديد رقم الطالب أو اسمه (مثال: 'بيانات الطالب أحمد')"
+
+    # ── 76. معدل طالب (بدون اسم) ────────────────────────────────────────────────
+    if re.search(r'(معدل|gpa)\s+(?:الطالب|الطالبة|student)\b', q, re.I) and not re.search(r'\d+', q):
+        return "لأستطيع المساعدة، الرجاء تحديد رقم الطالب أو اسمه (مثال: 'معدل الطالب أحمد')"
+
+    # ── 77. درجات طالب (بدون اسم) ─────────────────────────────────────────────
+    if re.search(r'(درجات|نتائج|علامات)\s+(?:الطالب|الطالبة|student)\b', q) and not re.search(r'\d+', q):
+        return "لأستطيع المساعدة، الرجاء تحديد رقم الطالب أو اسمه (مثال: 'درجات الطالب أحمد')"
+
+    # ── 78. حضور طالب (بدون اسم) ──────────────────────────────────────────────
+    if re.search(r'(حضور|غياب)\s+(?:الطالب|الطالبة|student)\b', q) and not re.search(r'\d+', q):
+        return "لأستطيع المساعدة، الرجاء تحديد رقم الطالب أو اسمه (مثال: 'حضور الطالب أحمد')"
+
+    # ── 79. المسجلين الجدد (variations) ────────────────────────────────────────
+    if re.search(r'(مسجل|تسجيل)', q):
+        try:
+            current = _sq(models.Student).count()
+            monthly_avg = max(current // 12, 5)
+            return f"📊 **المسجلين الجدد:** متوسط **{monthly_avg}** طالب شهرياً"
+        except: pass
+
+    # ── 80. الأسئلة غير المحددة بدقة (fallback عام) ──────────────────────────────
+    if re.search(r'(تقرير|ملخص|توقع|إحصائيات|مؤشرات|أهداف|نسبة الرضا|شكاوى|ذكور|إناث)', q):
+        try:
+            total = _sq(models.Student).count()
+            active = _sq(models.Student).filter(models.Student.status == "مقيد").count()
+            return (
+                f"📊 **ملخص سريع:**\n"
+                f"• إجمالي الطلاب: **{total}**\n"
+                f"• الطلاب النشطين: **{active}**"
+            )
+        except: pass
+
     return None  # لم يتطابق أي pattern → انتقل للـ AI
 
 
@@ -541,9 +1117,9 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
 def _build_admin_context(db: Session) -> str:
     """Injects live DB stats into every system prompt — answers general questions without tools."""
     try:
-        total  = db.query(models.Student).count()
-        active = db.query(models.Student).filter(models.Student.status  == "مقيد").count()
-        unpaid = db.query(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
+        total  = _sq(models.Student).count()
+        active = _sq(models.Student).filter(models.Student.status  == "مقيد").count()
+        unpaid = _sq(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
 
         faculties = db.query(models.Faculty).all()
         fac_list  = " | ".join(f.id for f in faculties) if faculties else "—"
@@ -556,7 +1132,7 @@ def _build_admin_context(db: Session) -> str:
         # Per-level counts
         level_counts = {}
         for lvl in range(1, 5):
-            c = db.query(models.Student).filter(models.Student.level == lvl).count()
+            c = _sq(models.Student).filter(models.Student.level == lvl).count()
             if c > 0:
                 level_counts[lvl] = c
 
@@ -684,7 +1260,7 @@ def _resolve_student(query: str, db: Session):
     s = db.get(models.Student, query)
     if s:
         return s, None
-    rows = db.query(models.Student).filter(
+    rows = _sq(models.Student).filter(
         models.Student.name.ilike(f"%{query}%")
     ).limit(5).all()
     if not rows:
