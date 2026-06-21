@@ -146,22 +146,27 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
     q = question.strip()
 
     # ── كشف أسئلة متعددة مرقمة في رسالة واحدة ───────────────────────────────
-    # مثال: "1. عدد الطلاب\n2. نسبة السداد\n..."
-    multi = re.findall(r'(?:^|\n)\s*\d+[\.\-\)]\s*(.+)', q)
+    multi = re.findall(r'(?:^|\n)\s*(\d+)[\.\-\)]\s*(.+)', q)
     if len(multi) >= 2:
+        BATCH = 15  # أقصى عدد في كل رد
+        batch = multi[:BATCH]
+        remaining = len(multi) - BATCH
+
         answers = []
-        for idx, sub_q in enumerate(multi, 1):
+        for num, sub_q in batch:
             sub_q = sub_q.strip()
             if not sub_q:
                 continue
             ans = _try_direct(sub_q, db, user)
             if ans:
-                answers.append(f"**{idx}. {sub_q}**\n{ans}")
+                answers.append(f"**{num}. {sub_q}**\n{ans}")
             else:
-                answers.append(f"**{idx}. {sub_q}**\n⏳ هذا السؤال يحتاج مراجعة يدوية أو بيانات إضافية.")
-        if answers:
-            return "\n\n---\n\n".join(answers)
-        return None
+                answers.append(f"**{num}. {sub_q}**\n⏳ سؤال معقد — اسأله منفرداً للحصول على إجابة تفصيلية.")
+
+        result = "\n\n---\n\n".join(answers)
+        if remaining > 0:
+            result += f"\n\n---\n\n📌 **تم الإجابة على {len(batch)} سؤال.** أرسل باقي الأسئلة ({remaining} سؤال) في رسالة جديدة."
+        return result
 
     # فلتر الكلية: super_admin يشوف الكل، faculty_admin يشوف كليته فقط
     fid = None
