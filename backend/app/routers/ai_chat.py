@@ -1117,9 +1117,9 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
 def _build_admin_context(db: Session) -> str:
     """Injects live DB stats into every system prompt — answers general questions without tools."""
     try:
-        total  = _sq(models.Student).count()
-        active = _sq(models.Student).filter(models.Student.status  == "مقيد").count()
-        unpaid = _sq(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
+        total  = db.query(models.Student).count()
+        active = db.query(models.Student).filter(models.Student.status  == "مقيد").count()
+        unpaid = db.query(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
 
         faculties = db.query(models.Faculty).all()
         fac_list  = " | ".join(f.id for f in faculties) if faculties else "—"
@@ -1132,7 +1132,7 @@ def _build_admin_context(db: Session) -> str:
         # Per-level counts
         level_counts = {}
         for lvl in range(1, 5):
-            c = _sq(models.Student).filter(models.Student.level == lvl).count()
+            c = db.query(models.Student).filter(models.Student.level == lvl).count()
             if c > 0:
                 level_counts[lvl] = c
 
@@ -1260,7 +1260,7 @@ def _resolve_student(query: str, db: Session):
     s = db.get(models.Student, query)
     if s:
         return s, None
-    rows = _sq(models.Student).filter(
+    rows = db.query(models.Student).filter(
         models.Student.name.ilike(f"%{query}%")
     ).limit(5).all()
     if not rows:
