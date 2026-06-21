@@ -431,7 +431,22 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
         return "\n".join(lines)
 
     # ── 16. المقررات الدراسية ────────────────────────────────────────────────
-    if re.search(r'(مقررات|المقررات|كورسات|المواد الدراسية|الكتالوج|catalog)', q, re.I):
+    # ── سؤال مركب: مواد + حضور ───────────────────────────────────────────────
+    if re.search(r'(مواد|مقررات|كورسات)', q) and re.search(r'(حضور|غياب)', q):
+        courses = db.query(models.Course).limit(20).all()
+        att_rows = db.query(models.AttendanceRecord)
+        if fid:
+            att_rows = att_rows.join(models.Student, models.AttendanceRecord.student_id == models.Student.student_id).filter(models.Student.faculty_id == fid)
+        att_rows = att_rows.all()
+        present = sum(1 for r in att_rows if r.status == "حاضر")
+        pct = round(present / len(att_rows) * 100, 1) if att_rows else 0
+        lines = [f"📖 **المواد الدراسية** ({len(courses)} مادة):"]
+        for c in courses:
+            lines.append(f"• {c.id}: {c.name} — سنة {c.level}")
+        lines.append(f"\n📅 **نسبة الحضور العامة:** {pct}% ({present} حاضر من {len(att_rows)} سجل)")
+        return "\n".join(lines)
+
+    if re.search(r'(مقررات|المقررات|كورسات|المواد الدراسية|الكتالوج|catalog|المواد الموجودة|المواد اللي|قائمة المواد)', q, re.I):
         rows = db.query(models.Course).limit(40).all()
         lines = [f"📖 **المقررات الدراسية** ({len(rows)} مادة):"]
         for c in rows:
