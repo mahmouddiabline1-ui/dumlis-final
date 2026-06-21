@@ -594,7 +594,7 @@ function App() {
                 <div className="relative group">
                   <button className="w-9 h-9 rounded-full overflow-hidden border-2 border-primary-600 hover:border-gold-500 transition-all shadow-inner">
                     {currentUser?.role === 'faculty_admin' && currentUser?.faculty_id === 'FCAI' ? (
-                      <img src="/dean_fcai.jpg" alt="عميد الكلية" className="w-full h-full object-cover" />
+                      <img src="/dean_fcai.PNG" alt="عميد الكلية" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-primary-700 flex items-center justify-center text-primary-200 hover:bg-gold-500 hover:text-primary-900">
                         <UserIcon className="w-5 h-5" />
