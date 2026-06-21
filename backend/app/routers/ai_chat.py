@@ -262,7 +262,7 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
         return "\n".join(lines)
 
     # ── 2. عدد الطلاب الإجمالي ───────────────────────────────────────────────
-    if re.search(r'(كم عدد الطلاب|كم طالب|عدد الطلاب الكلي|اجمالي الطلاب|إجمالي الطلاب)', q):
+    if re.search(r'(كم عدد الطلاب|كم طالب|عدد الطلاب|طلاب كام|الطلاب كام|اجمالي الطلاب|إجمالي الطلاب)', q):
         total  = _sq(models.Student).count()
         active = _sq(models.Student).filter(models.Student.status == "مقيد").count()
         return f"إجمالي الطلاب: **{total}** | منهم مقيدون: {active}"
@@ -1114,12 +1114,22 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
 
 # ── Live context builder ──────────────────────────────────────────────────────
 
-def _build_admin_context(db: Session) -> str:
+def _build_admin_context(db: Session, user=None) -> str:
     """Injects live DB stats into every system prompt — answers general questions without tools."""
     try:
-        total  = db.query(models.Student).count()
-        active = db.query(models.Student).filter(models.Student.status  == "مقيد").count()
-        unpaid = db.query(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
+        fid = None
+        if user and getattr(user, 'role', None) != 'super_admin':
+            fid = getattr(user, 'faculty_id', None)
+
+        def sq():
+            q = db.query(models.Student)
+            if fid:
+                q = q.filter(models.Student.faculty_id == fid)
+            return q
+
+        total  = sq().count()
+        active = sq().filter(models.Student.status  == "مقيد").count()
+        unpaid = sq().filter(models.Student.fees_status == "غير مسدد").count()
 
         faculties = db.query(models.Faculty).all()
         fac_list  = " | ".join(f.id for f in faculties) if faculties else "—"
@@ -1132,7 +1142,7 @@ def _build_admin_context(db: Session) -> str:
         # Per-level counts
         level_counts = {}
         for lvl in range(1, 5):
-            c = db.query(models.Student).filter(models.Student.level == lvl).count()
+            c = sq().filter(models.Student.level == lvl).count()
             if c > 0:
                 level_counts[lvl] = c
 
@@ -1750,7 +1760,7 @@ async def chat(
     tools  = ADMIN_TOOLS if is_admin else STUDENT_TOOLS
 
     if is_admin:
-        system = ADMIN_SYSTEM_BASE + _build_admin_context(db)
+        system = ADMIN_SYSTEM_BASE + _build_admin_context(db, current_user)
     else:
         system = STUDENT_SYSTEM
 
