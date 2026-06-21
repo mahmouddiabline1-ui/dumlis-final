@@ -261,13 +261,7 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
             lines.append("• توزيع المستويات: " + " | ".join(lvl_parts))
         return "\n".join(lines)
 
-    # ── 2. عدد الطلاب الإجمالي ───────────────────────────────────────────────
-    if re.search(r'(كم عدد الطلاب|كم طالب|عدد الطلاب|طلاب كام|الطلاب كام|اجمالي الطلاب|إجمالي الطلاب)', q):
-        total  = _sq(models.Student).count()
-        active = _sq(models.Student).filter(models.Student.status == "مقيد").count()
-        return f"إجمالي الطلاب: **{total}** | منهم مقيدون: {active}"
-
-    # ── 3. حالات الطلاب ──────────────────────────────────────────────────────
+    # ── 3. حالات الطلاب (لازم قبل pattern 2 عشان أكثر تحديداً) ──────────────
     for kw, status, label in [
         (r'مقيد|المقيدين|مقيدين',     "مقيد",   "المقيدين"),
         (r'موقوف|الموقوفين|موقوفين',   "موقوف",  "الموقوفين"),
@@ -280,8 +274,7 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
             return f"عدد الطلاب {label}: **{c}** طالب"
 
     # ── 4. طلاب لم يسددوا / غير مسددين ──────────────────────────────────────
-    if re.search(r'(لم يسدد|غير مسدد|متاخر|متأخر).{0,20}(رسوم|الرسوم|دفع)', q) or \
-       re.search(r'(رسوم|الرسوم).{0,20}(لم يسدد|غير مسدد)', q):
+    if re.search(r'(غير مسددين|غير المسددين|لم يسدد|غير مسدد|متاخر|متأخر)', q):
         c    = _sq(models.Student).filter(models.Student.fees_status == "غير مسدد").count()
         rows = _sq(models.Student).filter(models.Student.fees_status == "غير مسدد").limit(8).all()
         lines = [f"⚠️ الطلاب غير المسددين للرسوم: **{c}** طالب"]
@@ -289,6 +282,12 @@ def _try_direct(question: str, db: Session, user: models.User) -> Optional[str]:
             lines.append(f"• {s.name} ({s.student_id}) — {s.faculty_id}")
         if c > len(rows): lines.append(f"  ... و{c-len(rows)} آخرين")
         return "\n".join(lines)
+
+    # ── 2. عدد الطلاب الإجمالي ───────────────────────────────────────────────
+    if re.search(r'(كم عدد الطلاب|كم طالب|عدد الطلاب|طلاب كام|الطلاب كام|اجمالي الطلاب|إجمالي الطلاب)', q):
+        total  = _sq(models.Student).count()
+        active = _sq(models.Student).filter(models.Student.status == "مقيد").count()
+        return f"إجمالي الطلاب: **{total}** | منهم مقيدون: {active}"
 
     # ── 5. طلاب مستوى معين ───────────────────────────────────────────────────
     lvl = _level_in(q)
